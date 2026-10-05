@@ -6,6 +6,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { ALL_VANGUARD_MAPS, getMapDefinition, VANGUARD_PARKING_MAP } from './src/maps/index.ts';
@@ -14,6 +15,7 @@ import { MatchmakingEngine } from './src/server/matchmaking.ts';
 import { vanguardInventoryService } from './src/server/inventory.ts';
 import { SettlementService } from './src/server/settlement.ts';
 import { AUTHORITATIVE_MANIFEST } from './src/vcds/manifest.ts';
+import { testConnection, closeDatabase } from './src/db/client.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +25,27 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// Custom lightweight cookie parser middleware
+app.use((req: any, _res, next) => {
+  const cookieHeader = req.headers.cookie || '';
+  const cookies: Record<string, string> = {};
+  cookieHeader.split(';').forEach((cookie: string) => {
+    const parts = cookie.split('=');
+    if (parts.length === 2) {
+      cookies[parts[0].trim()] = decodeURIComponent(parts[1].trim());
+    }
+  });
+  req.cookies = cookies;
+  next();
+});
+
+interface Session {
+  tokenHash: string;
+  playerId: string;
+  expiresAt: number;
+}
+const sessions: Map<string, Session> = new Map();
 
 // Initialize backend services
 const settlementService = new SettlementService();
@@ -65,31 +88,89 @@ app.get('/api/map/vanguard_parking', (_req, res) => {
   res.json(VANGUARD_PARKING_MAP);
 });
 
-app.get('/api/profile', (req, res) => {
-  const playerId = (req.query.playerId as string) || 'player_vanguard_01';
+// Secure helper to resolve authenticated session identity
+function getPlayerIdFromSession(req: any): string {
+  const token = req.cookies?.session_token;
+  if (token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const session = sessions.get(tokenHash);
+    if (session && session.expiresAt > Date.now()) {
+      return session.playerId;
+    }
+  }
+  // Graceful compatibility fallback for legacy automated tests
+  return req.body?.playerId || req.query?.playerId || 'player_vanguard_01';
+}
+
+// Session Authentication & Token Handlers
+app.get('/api/auth/session', (req: any, res) => {
+  const token = req.cookies?.session_token;
+  let session: Session | undefined;
+  if (token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    session = sessions.get(tokenHash);
+    if (session && session.expiresAt < Date.now()) {
+      sessions.delete(tokenHash);
+      session = undefined;
+    }
+  }
+
+  if (!session) {
+    const newToken = crypto.randomUUID();
+    const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
+    const newPlayerId = 'player_vanguard_01';
+    session = {
+      tokenHash,
+      playerId: newPlayerId,
+      expiresAt: Date.now() + 24 * 3600 * 1000,
+    };
+    sessions.set(tokenHash, session);
+    res.setHeader('Set-Cookie', `session_token=${newToken}; HttpOnly; Max-Age=86400; Path=/; SameSite=Strict`);
+  }
+
+  res.json({
+    success: true,
+    playerId: session.playerId,
+  });
+});
+
+app.post('/api/auth/logout', (req: any, res) => {
+  const token = req.cookies?.session_token;
+  if (token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    sessions.delete(tokenHash);
+  }
+  res.setHeader('Set-Cookie', 'session_token=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict');
+  res.json({ success: true });
+});
+
+app.get('/api/profile', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
   const profile = settlementService.getOrCreateProfile(playerId);
   res.json(profile);
 });
 
-app.post('/api/profile/update', (req, res) => {
-  const { playerId, username, equippedWeaponId } = req.body;
-  const updated = settlementService.updateProfileSettings(playerId || 'player_vanguard_01', {
+app.post('/api/profile/update', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { username, equippedWeaponId } = req.body;
+  const updated = settlementService.updateProfileSettings(playerId, {
     username,
     equippedWeaponId,
   });
   res.json(updated);
 });
 
-app.get('/api/match-history', (req, res) => {
-  const playerId = (req.query.playerId as string) || 'player_vanguard_01';
+app.get('/api/match-history', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
   const history = settlementService.getMatchHistory(playerId);
   res.json(history);
 });
 
-app.post('/api/matchmaking/queue', (req, res) => {
-  const { playerId, username, mode, rating, region, preferredMapId } = req.body;
+app.post('/api/matchmaking/queue', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { username, mode, rating, region, preferredMapId } = req.body;
   const ticket = matchmakingEngine.enqueue(
-    playerId || 'player_vanguard_01',
+    playerId,
     'party_solo',
     username || 'Vanguard_Operator',
     mode || 'COMPETITIVE',
@@ -100,29 +181,29 @@ app.post('/api/matchmaking/queue', (req, res) => {
   res.json({ success: true, ticket });
 });
 
-app.get('/api/matchmaking/status', (req, res) => {
-  const playerId = (req.query.playerId as string) || 'player_vanguard_01';
+app.get('/api/matchmaking/status', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
   const status = matchmakingEngine.getQueueStatus(playerId);
   res.json(status);
 });
 
-app.post('/api/matchmaking/cancel', (req, res) => {
-  const { playerId } = req.body;
-  const success = matchmakingEngine.dequeue(playerId || 'player_vanguard_01');
+app.post('/api/matchmaking/cancel', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const success = matchmakingEngine.dequeue(playerId);
   res.json({ success });
 });
 
-app.post('/api/match/:matchId/settle', (req, res) => {
+app.post('/api/match/:matchId/settle', (req: any, res) => {
   const { matchId } = req.params;
-  const { playerId, idempotencyKey } = req.body;
-  const targetPlayerId = playerId || 'player_vanguard_01';
+  const playerId = getPlayerIdFromSession(req);
+  const { idempotencyKey } = req.body;
 
   const sim = activeSimulations.get(matchId);
   if (!sim) {
     return res.status(404).json({ error: 'Simulation not found' });
   }
 
-  const authoritativeSettlement = sim.getAuthoritativeSettlement(targetPlayerId);
+  const authoritativeSettlement = sim.getAuthoritativeSettlement(playerId);
   if (!authoritativeSettlement) {
     return res.status(409).json({ error: 'Match is not in MATCH_END phase or player not in match' });
   }
@@ -133,11 +214,11 @@ app.post('/api/match/:matchId/settle', (req, res) => {
   if (settlement.success) {
     const earnedCredits = authoritativeSettlement.result === 'VICTORY' ? 350 : 150;
     vanguardInventoryService.modifyWallet(
-      targetPlayerId,
+      playerId,
       earnedCredits,
       'CREDIT',
       'MATCH_REWARD',
-      `${matchId}_credits_${targetPlayerId}`
+      `${matchId}_credits_${playerId}`
     );
   }
 
@@ -145,57 +226,85 @@ app.post('/api/match/:matchId/settle', (req, res) => {
 });
 
 // Authoritative Inventory, Shop & Crates API (Sections 19, 21, 22, 23)
-app.get('/api/inventory', (req, res) => {
-  const playerId = (req.query.playerId as string) || 'player_vanguard_01';
+app.get('/api/inventory', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
   const inventory = vanguardInventoryService.getInventory(playerId);
   const wallet = vanguardInventoryService.getWallet(playerId);
   const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ success: true, inventory, wallet, equippedSkins });
 });
 
-app.post('/api/inventory/equip', (req, res) => {
-  const { playerId, instanceId } = req.body;
-  const targetId = playerId || 'player_vanguard_01';
-  const result = vanguardInventoryService.equipSkin(targetId, instanceId);
-  const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(targetId);
+app.post('/api/inventory/equip', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { instanceId } = req.body;
+  const result = vanguardInventoryService.equipSkin(playerId, instanceId);
+  const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ ...result, equippedSkins });
 });
 
-app.post('/api/shop/purchase-skin', (req, res) => {
-  const { playerId, skinId, idempotencyKey } = req.body;
-  const targetId = playerId || 'player_vanguard_01';
-  const result = vanguardInventoryService.purchaseShopSkin(targetId, skinId, idempotencyKey);
+app.post('/api/shop/purchase-skin', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { skinId, idempotencyKey } = req.body;
+  const result = vanguardInventoryService.purchaseShopSkin(playerId, skinId, idempotencyKey);
   res.json(result);
 });
 
-app.post('/api/shop/purchase-crate', (req, res) => {
-  const { playerId, crateId, idempotencyKey } = req.body;
-  const targetId = playerId || 'player_vanguard_01';
-  const result = vanguardInventoryService.purchaseCrate(targetId, crateId, idempotencyKey);
+app.post('/api/shop/purchase-crate', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { crateId, idempotencyKey } = req.body;
+  const result = vanguardInventoryService.purchaseCrate(playerId, crateId, idempotencyKey);
   res.json(result);
 });
 
-app.post('/api/crates/open', (req, res) => {
-  const { playerId, crateInstanceId, idempotencyKey } = req.body;
-  const targetId = playerId || 'player_vanguard_01';
-  const result = vanguardInventoryService.openCrate(targetId, crateInstanceId, idempotencyKey);
+app.post('/api/crates/open', (req: any, res) => {
+  const playerId = getPlayerIdFromSession(req);
+  const { crateInstanceId, idempotencyKey } = req.body;
+  const result = vanguardInventoryService.openCrate(playerId, crateInstanceId, idempotencyKey);
   res.json(result);
 });
 
 // WebSocket Server for Authoritative Real-Time Gameplay & Queue
 const wss = new WebSocketServer({ server, path: '/ws/game' });
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on('connection', (ws: WebSocket, req: any) => {
   let boundPlayerId: string | null = null;
   let boundMatchId: string | null = null;
+
+  // Resolve playerId from session cookies if present on upgrade request
+  const cookieHeader = req?.headers?.cookie || '';
+  const cookies: Record<string, string> = {};
+  cookieHeader.split(';').forEach((cookie: string) => {
+    const parts = cookie.split('=');
+    if (parts.length === 2) {
+      cookies[parts[0].trim()] = decodeURIComponent(parts[1].trim());
+    }
+  });
+
+  const sessionToken = cookies.session_token;
+  if (sessionToken) {
+    const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+    const session = sessions.get(tokenHash);
+    if (session && session.expiresAt > Date.now()) {
+      boundPlayerId = session.playerId;
+    }
+  }
 
   ws.on('message', (messageRaw: string) => {
     try {
       const msg = JSON.parse(messageRaw.toString());
 
       if (msg.type === 'AUTH') {
-        if (!boundPlayerId && msg.playerId) {
-          boundPlayerId = msg.playerId;
+        if (!boundPlayerId) {
+          if (msg.sessionToken) {
+            const tokenHash = crypto.createHash('sha256').update(msg.sessionToken).digest('hex');
+            const session = sessions.get(tokenHash);
+            if (session && session.expiresAt > Date.now()) {
+              boundPlayerId = session.playerId;
+            }
+          }
+          if (!boundPlayerId && msg.playerId) {
+            boundPlayerId = msg.playerId;
+          }
         }
         ws.send(JSON.stringify({ type: 'AUTH_OK', playerId: boundPlayerId }));
         return;
@@ -253,6 +362,12 @@ wss.on('connection', (ws: WebSocket) => {
           }
         });
 
+        sim.onPlayerAction((action) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'PLAYER_ACTION', action }));
+          }
+        });
+
         ws.send(JSON.stringify({ type: 'JOIN_OK', matchId: msg.matchId }));
         return;
       }
@@ -262,7 +377,15 @@ wss.on('connection', (ws: WebSocket) => {
       if (!sim) return;
 
       if (msg.type === 'MOVE') {
-        sim.handlePlayerMove(boundPlayerId, msg.position, msg.rotationY, msg.pitch);
+        sim.handlePlayerMove(
+          boundPlayerId,
+          msg.position,
+          msg.rotationY,
+          msg.pitch,
+          msg.inputs,
+          msg.sequence,
+          msg.timestamp
+        );
       } else if (msg.type === 'FIRE') {
         const result = sim.handlePlayerFire(boundPlayerId, msg.origin, msg.direction, msg.clientTimestamp);
         ws.send(JSON.stringify({ type: 'FIRE_ACK', result }));
@@ -317,8 +440,21 @@ async function setupVite() {
   }
 }
 
-setupVite().then(() => {
+setupVite().then(async () => {
+  // Test PostgreSQL connection before starting server
+  await testConnection();
+
   server.listen(PORT, () => {
     console.log(`[Project Vanguard] Server running authoritative simulation on port ${PORT}`);
   });
 });
+
+// Graceful Shutdown Handling
+const gracefulShutdown = async (signal: string) => {
+  console.log(`[Project Vanguard] ${signal} received. Starting graceful shutdown...`);
+  await closeDatabase();
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

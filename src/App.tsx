@@ -60,16 +60,32 @@ export default function App() {
 
   // Initial Boot & Profile Fetch
   useEffect(() => {
-    // 1. Fetch server profile & match history
-    fetch('/api/profile?playerId=player_vanguard_01')
+    // 1. Fetch server session token & resolve playerId
+    fetch('/api/auth/session')
       .then((r) => r.json())
-      .then((data) => setProfile(data))
-      .catch((e) => console.warn('Using offline profile', e));
+      .then((sessionData) => {
+        const activePlayerId = sessionData.playerId || 'player_vanguard_01';
+        setProfile((prev) => ({ ...prev, id: activePlayerId }));
 
-    fetch('/api/match-history?playerId=player_vanguard_01')
-      .then((r) => r.json())
-      .then((data) => setMatchHistory(data))
-      .catch((e) => console.warn('Using offline history', e));
+        // 2. Fetch server profile & match history with established session
+        fetch(`/api/profile?playerId=${activePlayerId}`)
+          .then((r) => r.json())
+          .then((data) => setProfile(data))
+          .catch((e) => console.warn('Using offline profile', e));
+
+        fetch(`/api/match-history?playerId=${activePlayerId}`)
+          .then((r) => r.json())
+          .then((data) => setMatchHistory(data))
+          .catch((e) => console.warn('Using offline history', e));
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch auth session, using default', err);
+        // Fallback profile
+        fetch('/api/profile?playerId=player_vanguard_01')
+          .then((r) => r.json())
+          .then((data) => setProfile(data))
+          .catch((e) => console.warn('Using offline profile', e));
+      });
 
     // Boot -> Session -> Content Check
     const bootTimer = setTimeout(() => {
@@ -86,62 +102,35 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'MATCHMAKING') return;
 
+    let hasTransitioned = false;
+
     const pollInterval = setInterval(() => {
-      fetch('/api/matchmaking/status?playerId=player_vanguard_01')
+      fetch(`/api/matchmaking/status?playerId=${profile.id}`)
         .then((r) => r.json())
         .then((data) => {
           setPlayersInQueue(data.playersInQueue || 7);
+          if (data.match && !hasTransitioned) {
+            hasTransitioned = true;
+            setActiveMatch(data.match);
+            transitionTo('MATCH_FOUND');
+          }
         })
         .catch(() => {});
-    }, 1500);
-
-    // Simulated match found after short queue
-    const matchFoundTimer = setTimeout(() => {
-      const mapDef = getMapDefinition(activeQueueMap);
-      const simulatedMatch: MatchSessionInfo = {
-        matchId: `match_vg_${Date.now().toString().slice(-4)}`,
-        mode: activeQueueMode,
-        mapId: mapDef.id,
-        mapName: mapDef.name,
-        teams: {
-          alpha: {
-            id: 'team_alpha',
-            name: 'Taskforce Alpha',
-            players: [
-              { id: 'player_vanguard_01', username: profile.username, rating: profile.rating },
-              { id: 'bot_alpha_1', username: 'Vanguard-Ghost', rating: 1250 },
-              { id: 'bot_alpha_2', username: 'Vanguard-Viper', rating: 1210 },
-              { id: 'bot_alpha_3', username: 'Vanguard-Titan', rating: 1280 },
-              { id: 'bot_alpha_4', username: 'Vanguard-Echo', rating: 1220 },
-            ],
-          },
-          omega: {
-            id: 'team_omega',
-            name: 'Apex Security',
-            players: [
-              { id: 'bot_omega_1', username: 'Apex-Shadow', rating: 1260 },
-              { id: 'bot_omega_2', username: 'Apex-Raven', rating: 1230 },
-              { id: 'bot_omega_3', username: 'Apex-Kodiak', rating: 1240 },
-              { id: 'bot_omega_4', username: 'Apex-Spectre', rating: 1270 },
-              { id: 'bot_omega_5', username: 'Apex-Frost', rating: 1210 },
-            ],
-          },
-        },
-        assignedTeam: 'alpha',
-        serverUrl: 'ws://localhost:3000/ws/game',
-        maxRounds: 24,
-        roundTimeToLiveSec: 105,
-      };
-
-      setActiveMatch(simulatedMatch);
-      transitionTo('MATCH_FOUND');
-    }, 4500);
+    }, 1200);
 
     return () => {
       clearInterval(pollInterval);
-      clearTimeout(matchFoundTimer);
     };
   }, [phase, activeQueueMode, activeQueueMap, profile]);
+
+  // LOADING_GAME auto-transition to IN_GAME
+  useEffect(() => {
+    if (phase !== 'LOADING_GAME') return;
+    const timer = setTimeout(() => {
+      transitionTo('IN_GAME');
+    }, 1800); // 1.8s immersive loading delay
+    return () => clearTimeout(timer);
+  }, [phase]);
 
   const handleStartMatchmaking = (mode: GameMode, mapId = 'industrial_zone') => {
     setActiveQueueMode(mode);
@@ -247,8 +236,21 @@ export default function App() {
       {phase === 'MATCH_FOUND' && activeMatch && (
         <MatchFoundModal
           match={activeMatch}
-          onDeploy={() => transitionTo('IN_GAME')}
+          onDeploy={() => transitionTo('LOADING_GAME')}
         />
+      )}
+
+      {/* 4.5. LOADING GAME SCREEN */}
+      {phase === 'LOADING_GAME' && activeMatch && (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-[#07090e] text-white font-['Plus_Jakarta_Sans']">
+          <div className="w-12 h-12 border-4 border-t-cyan-400 border-r-transparent border-b-cyan-400 border-l-transparent rounded-full animate-spin mb-6" />
+          <h2 className="text-xl font-bold font-['Chakra_Petch'] tracking-widest uppercase text-cyan-400 mb-2">
+            LOADING TACTICAL GRID
+          </h2>
+          <div className="text-xs font-mono text-gray-400 tracking-wider">
+            DEPLOYING TO {activeMatch.mapName.toUpperCase()}...
+          </div>
+        </div>
       )}
 
       {/* 5. IN-GAME 3D FPS (Phase 33 & Complete Round Loop) */}

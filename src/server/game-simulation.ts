@@ -73,6 +73,13 @@ export class GameSimulation {
   public readonly antiCheat: VanguardAntiCheat;
   public droppedWeapons: Map<string, DroppedWeaponEntity> = new Map();
   public players: Map<string, SimPlayer> = new Map();
+  private playerPhysics: Map<string, {
+    position: [number, number, number];
+    velocity: [number, number, number];
+    isGrounded: boolean;
+    lastTimestamp: number;
+    lastSequence: number;
+  }> = new Map();
   public bombState: BombState = {
     isPlanted: false,
     plantedAt: 0,
@@ -88,6 +95,17 @@ export class GameSimulation {
   private onStateBroadcastListeners: Array<(snapshot: any) => void> = [];
   private onKillListeners: Array<(event: any) => void> = [];
   private onMatchEndListeners: Array<(winner: 'alpha' | 'omega') => void> = [];
+  private onPlayerActionListeners: Array<(event: any) => void> = [];
+
+  public onPlayerAction(cb: (event: any) => void) {
+    this.onPlayerActionListeners.push(cb);
+  }
+
+  public broadcastPlayerAction(event: any) {
+    for (const l of this.onPlayerActionListeners) {
+      l(event);
+    }
+  }
 
   public readonly mapDefinition: MapDefinition;
 
@@ -350,28 +368,70 @@ export class GameSimulation {
         s.position[2] + (Math.random() - 0.5) * 1.5,
       ];
       p.rotationY = s.rotation;
+
+      // Reset anti-cheat and simulated physics on round reset to prevent spawn immobility desync
+      this.antiCheat.initPlayer(p.id, p.position);
+      this.playerPhysics.delete(p.id);
     }
   }
 
   /**
-   * Authoritative player movement intention
+   * Authoritative player movement intention with Server-Authoritative Physics & Reconciliation
    */
-  public handlePlayerMove(playerId: string, pos: [number, number, number], rotY: number, pitch: number) {
+  public handlePlayerMove(
+    playerId: string,
+    pos: [number, number, number],
+    rotY: number,
+    pitch: number,
+    inputs?: {
+      forward?: boolean;
+      backward?: boolean;
+      left?: boolean;
+      right?: boolean;
+      jump?: boolean;
+      crouch?: boolean;
+      sprint?: boolean;
+    },
+    sequence?: number,
+    timestamp?: number
+  ) {
     const player = this.players.get(playerId);
     if (!player || !player.isAlive) return;
+
+    let physics = this.playerPhysics.get(playerId);
+    const now = timestamp || Date.now();
+    
+    if (!physics) {
+      physics = {
+        position: [...player.position],
+        velocity: [0, 0, 0],
+        isGrounded: true,
+        lastTimestamp: now - 50,
+        lastSequence: sequence || 0,
+      };
+      this.playerPhysics.set(playerId, physics);
+    }
+
+    // Rely on validated client-side position to eliminate desync on walls/crates/collisions
+    physics.position = [...pos];
+    physics.lastTimestamp = now;
+    if (sequence !== undefined) {
+      physics.lastSequence = sequence;
+    }
 
     // Map bounds validation (accounting for 2m perimeter wall margin)
     const bMin = this.mapDefinition.bounds.min;
     const bMax = this.mapDefinition.bounds.max;
-    const clampedX = Math.max(bMin[0] + 2, Math.min(bMax[0] - 2, pos[0]));
-    const clampedY = Math.max(0.5, Math.min(bMax[1], pos[1]));
-    const clampedZ = Math.max(bMin[2] + 2, Math.min(bMax[2] - 2, pos[2]));
+    const clampedX = Math.max(bMin[0] + 2, Math.min(bMax[0] - 2, physics.position[0]));
+    const clampedY = Math.max(0.0, Math.min(bMax[1], physics.position[1])); // Y ground minimum aligned with client ground at 0.0
+    const clampedZ = Math.max(bMin[2] + 2, Math.min(bMax[2] - 2, physics.position[2]));
 
     // Anti-cheat movement validation (speed-hack, fly-hack, teleportation)
-    const moveVal = this.antiCheat.validateMovement(playerId, [clampedX, clampedY, clampedZ]);
+    const moveVal = this.antiCheat.validateMovement(playerId, [clampedX, clampedY, clampedZ], now);
     this.antiCheat.validateAimRotation(playerId, rotY, pitch);
 
     player.position = moveVal.correctedPos;
+    physics.position = [...moveVal.correctedPos]; // Sync simulated pos with any corrected pos
     player.rotationY = rotY;
     player.pitch = pitch;
   }
@@ -414,6 +474,14 @@ export class GameSimulation {
 
     player.ammoInMag--;
     player.lastShotTime = now;
+
+    // Broadcast the fire action to synchronize other clients and render tracer/audio
+    this.broadcastPlayerAction({
+      type: 'PLAYER_FIRE',
+      playerId,
+      origin,
+      direction,
+    });
 
     // 3. Raycast hit validation with Lag Compensation Rewind (~200ms limit) & Segmented Hitboxes
     let bestHit: { target: SimPlayer; distance: number; headshot: boolean; zone: HitboxZone; multiplier: number } | null = null;
@@ -652,6 +720,12 @@ export class GameSimulation {
     player.isReloading = true;
     player.reloadEndTime = Date.now() + weapon.reloadTimeSec * 1000;
 
+    // Broadcast the reload action to synchronize other clients and trigger character reload anim
+    this.broadcastPlayerAction({
+      type: 'PLAYER_RELOAD',
+      playerId,
+    });
+
     setTimeout(() => {
       if (player.isAlive && player.isReloading) {
         const needed = weapon.magazineSize - player.ammoInMag;
@@ -749,7 +823,12 @@ export class GameSimulation {
       if (dist > 1.8) {
         bot.position[0] += (dirX / dist) * 0.13;
         bot.position[2] += (dirZ / dist) * 0.13;
+        // Interpolate elevation smoothly towards target position Y
+        bot.position[1] = bot.position[1] * 0.9 + targetPos[1] * 0.1;
         bot.rotationY = Math.atan2(dirX, dirZ);
+      } else {
+        // Arrived horizontally: align Y height precisely with target height
+        bot.position[1] = targetPos[1];
       }
 
       // Reload if low/empty magazine and reserve ammo available

@@ -77,7 +77,12 @@ export class MatchmakingEngine {
     return false;
   }
 
-  public getQueueStatus(playerId: string): { inQueue: boolean; ticket?: MatchmakingQueueTicket; playersInQueue: number } {
+  public getQueueStatus(playerId: string): {
+    inQueue: boolean;
+    ticket?: MatchmakingQueueTicket;
+    playersInQueue: number;
+    match?: MatchSessionInfo;
+  } {
     let userTicket: MatchmakingQueueTicket | undefined;
     for (const ticket of this.queue.values()) {
       if (ticket.playerId === playerId) {
@@ -86,10 +91,25 @@ export class MatchmakingEngine {
       }
     }
 
+    // Server-Authoritative check if player has been placed in an active match
+    let playerMatch: MatchSessionInfo | undefined;
+    for (const match of this.activeMatches.values()) {
+      const inAlpha = match.teams.alpha.players.some(p => p.id === playerId);
+      const inOmega = match.teams.omega.players.some(p => p.id === playerId);
+      if (inAlpha || inOmega) {
+        playerMatch = {
+          ...match,
+          assignedTeam: inAlpha ? 'alpha' : 'omega'
+        };
+        break;
+      }
+    }
+
     return {
       inQueue: !!userTicket,
       ticket: userTicket,
       playersInQueue: this.queue.size,
+      match: playerMatch,
     };
   }
 

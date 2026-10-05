@@ -94,6 +94,8 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   const [inBombsite, setInBombsite] = useState<string | null>(null);
   const [plantProgress, setPlantProgress] = useState(0);
   const [isPlanting, setIsPlanting] = useState(false);
+  const [defuseProgress, setDefuseProgress] = useState(0);
+  const [isDefusing, setIsDefusing] = useState(false);
 
   // Spectator State
   const [isDead, setIsDead] = useState(false);
@@ -119,7 +121,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   const nearbyDroppedWeaponRef = useRef<DroppedWeaponEntity | null>(null);
   const inBombsiteRef = useRef<string | null>(null);
   const bombPlantedRef = useRef(false);
+  const bombPositionRef = useRef<[number, number, number] | null>(null);
   const isPlantingRef = useRef(false);
+  const isDefusingRef = useRef(false);
   const isReloadingRef = useRef(false);
   const ammoInMagRef = useRef(30);
   const reserveAmmoRef = useRef(90);
@@ -134,6 +138,8 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
     startTime: Date.now(),
   });
 
+  const moveSequenceNumRef = useRef(0);
+
   const magMeshRef = useRef<THREE.Mesh | null>(null);
   const chargingHandleRef = useRef<THREE.Mesh | null>(null);
   const activeTracersRef = useRef<Array<{ line: THREE.Line; expiresAt: number }>>([]);
@@ -145,6 +151,25 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    let reloadAnimStartTime = 0;
+    const doReloadAnimTrigger = () => {
+      reloadAnimStartTime = performance.now();
+    };
+
+    let reloadTimeout: any = null;
+    const cancelReload = () => {
+      if (isReloadingRef.current) {
+        setIsReloading(false);
+        isReloadingRef.current = false;
+        if (reloadTimeout) {
+          clearTimeout(reloadTimeout);
+          reloadTimeout = null;
+        }
+        if (magMeshRef.current) magMeshRef.current.position.y = -0.11;
+        if (chargingHandleRef.current) chargingHandleRef.current.position.z = 0.02;
+      }
+    };
 
     // 1. Scene, Camera, WebGL Renderer
     const scene = new THREE.Scene();
@@ -583,36 +608,43 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
       }
       if (e.code === 'KeyG') {
         // Drop current weapon
+        cancelReload();
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({ type: 'DROP_WEAPON', playerId }));
         }
       }
       if (e.code === 'Digit1') {
+        cancelReload();
         setActiveSlot('primary');
         activeSlotRef.current = 'primary';
         rebuildFPWeaponModel('primary', currentWeaponId);
       }
       if (e.code === 'Digit2') {
+        cancelReload();
         setActiveSlot('pistol');
         activeSlotRef.current = 'pistol';
         rebuildFPWeaponModel('pistol', 'vanguard_pistol');
       }
       if (e.code === 'Digit3') {
+        cancelReload();
         setActiveSlot('knife');
         activeSlotRef.current = 'knife';
         rebuildFPWeaponModel('knife', 'vanguard_knife');
       }
       if (e.code === 'Digit4' && grenadesRef.current.he > 0) {
+        cancelReload();
         setActiveSlot('he');
         activeSlotRef.current = 'he';
         rebuildFPWeaponModel('he', 'he');
       }
       if (e.code === 'Digit5' && grenadesRef.current.smoke > 0) {
+        cancelReload();
         setActiveSlot('smoke');
         activeSlotRef.current = 'smoke';
         rebuildFPWeaponModel('smoke', 'smoke');
       }
       if (e.code === 'Digit6' && grenadesRef.current.flash > 0) {
+        cancelReload();
         setActiveSlot('flash');
         activeSlotRef.current = 'flash';
         rebuildFPWeaponModel('flash', 'flash');
@@ -641,13 +673,16 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
     };
 
     const doReload = () => {
+      if (isReloadingRef.current) return;
       setIsReloading(true);
       isReloadingRef.current = true;
+      doReloadAnimTrigger();
       tacticalAudio.playReload();
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'RELOAD', playerId }));
       }
-      setTimeout(() => {
+      if (reloadTimeout) clearTimeout(reloadTimeout);
+      reloadTimeout = setTimeout(() => {
         const needed = 30 - ammoInMagRef.current;
         const take = Math.min(needed, reserveAmmoRef.current);
         const newAmmo = ammoInMagRef.current + take;
@@ -658,6 +693,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
         setReserveAmmo(newReserve);
         setIsReloading(false);
         isReloadingRef.current = false;
+        reloadTimeout = null;
       }, 2200);
     };
     doReloadRef.current = doReload;
@@ -813,6 +849,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           setScores(snap.scores);
           setBombPlanted(snap.bomb.isPlanted);
           bombPlantedRef.current = snap.bomb.isPlanted;
+          bombPositionRef.current = snap.bomb.position;
 
           // Update local player state
           const me = snap.players.find((p: any) => p.id === playerId);
@@ -830,6 +867,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             if (!me.isAlive) {
               setIsDead(true);
               isDeadRef.current = true;
+              cancelReload();
               // Find who we are spectating
               const target = snap.players.find((p: any) => p.id === me.spectatingTargetId);
               if (target) {
@@ -842,6 +880,20 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             } else {
               setIsDead(false);
               isDeadRef.current = false;
+
+              // Local Player Position Reconciliation to prevent getting stuck on spawn/models or desync
+              const feetY = camera.position.y - (isCrouchingRef.current ? 1.1 : 1.7);
+              const distToServer = Math.hypot(camera.position.x - me.position[0], feetY - me.position[1], camera.position.z - me.position[2]);
+              
+              if (distToServer > 1.8) {
+                console.log(`[Vanguard Reconciliation] Position desync detected (${distToServer.toFixed(2)}m). Snapping client to server.`);
+                camera.position.set(
+                  me.position[0],
+                  me.position[1] + (isCrouchingRef.current ? 1.1 : 1.7),
+                  me.position[2]
+                );
+                velocity.set(0, 0, 0);
+              }
             }
           }
 
@@ -908,6 +960,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             rig.group.visible = p.isAlive;
             (rig.group as any).targetPos = new THREE.Vector3(p.position[0], p.position[1], p.position[2]);
             (rig.group as any).targetRotY = p.rotationY;
+            (rig as any).isReloading = p.isReloading;
           }
         } else if (data.type === 'KILL_EVENT') {
           const k = data.killEvent;
@@ -926,6 +979,43 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             statsRef.current.kills++;
             if (k.headshot) statsRef.current.headshots++;
             tacticalAudio.playHitSound(k.headshot);
+          }
+        } else if (data.type === 'PLAYER_ACTION' && data.action) {
+          const act = data.action;
+          if (act.playerId !== playerId) {
+            if (act.type === 'PLAYER_FIRE') {
+              tacticalAudio.playGunshot('rifle');
+              const rig = botRigs.get(act.playerId);
+              if (rig) {
+                // Set muzzle flash point on their rifle
+                const startPos = new THREE.Vector3(act.origin[0], act.origin[1] + 1.4, act.origin[2]);
+                const dir = new THREE.Vector3(act.direction[0], act.direction[1], act.direction[2]).normalize();
+                const endPos = startPos.clone().addScaledVector(dir, 55);
+
+                const tracerGeo = new THREE.BufferGeometry().setFromPoints([startPos, endPos]);
+                const tracerMat = new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.8 });
+                const tracerLine = new THREE.Line(tracerGeo, tracerMat);
+                scene.add(tracerLine);
+                activeTracersRef.current.push({ line: tracerLine, expiresAt: Date.now() + 100 });
+
+                // Spawn casing
+                const casingGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.02, 8);
+                const casingMat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.9, roughness: 0.2 });
+                const casingMesh = new THREE.Mesh(casingGeo, casingMat);
+                casingMesh.position.copy(startPos);
+                scene.add(casingMesh);
+                const rightVec = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), rig.group.rotation.y);
+                const upVec = new THREE.Vector3(0, 1, 0);
+                activeCasingsRef.current.push({
+                  mesh: casingMesh,
+                  vel: rightVec.clone().multiplyScalar(1.5).addScaledVector(upVec, 1.0),
+                  rotVel: new THREE.Vector3(Math.random() * 5, Math.random() * 5, Math.random() * 5),
+                  expiresAt: Date.now() + 1500,
+                });
+              }
+            } else if (act.type === 'PLAYER_RELOAD') {
+              tacticalAudio.playReload();
+            }
           }
         } else if (data.type === 'MATCH_OVER') {
           const winnerTeam = data.winner;
@@ -952,11 +1042,6 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
     let animationId: number;
     let lastTime = performance.now();
     let networkSendTimer = 0;
-    let reloadAnimStartTime = 0;
-
-    const doReloadAnimTrigger = () => {
-      reloadAnimStartTime = performance.now();
-    };
 
     const animate = (currentTime: number) => {
       animationId = requestAnimationFrame(animate);
@@ -1145,16 +1230,28 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           rig.group.position.z = THREE.MathUtils.lerp(rig.group.position.z, targetPos.z, 0.25);
           rig.group.rotation.y = THREE.MathUtils.lerp(rig.group.rotation.y, targetRotY, 0.25);
 
-          // GROUND STANDING HEIGHT ALIGNMENT: Snap/lerp bot to floor, crate, ramp, or catwalk surface
-          const botStandingY = getStandingSurfaceY(rig.group.position.x, rig.group.position.z, rig.group.position.y);
-          rig.group.position.y = THREE.MathUtils.lerp(rig.group.position.y, botStandingY, 0.35);
+          // Smooth Y position interpolation directly using server's authoritative Y height to ensure smooth ramp/platform movement
+          rig.group.position.y = THREE.MathUtils.lerp(rig.group.position.y, targetPos.y, 0.25);
 
           // Calculate distance moved for leg running cycle
           const distMoved = Math.hypot(rig.group.position.x - rig.lastPos.x, rig.group.position.z - rig.lastPos.z);
           rig.lastPos.copy(rig.group.position);
 
-          if (distMoved > 0.005) {
-            rig.walkTimer += distMoved * 12;
+          const isMoving = distMoved > 0.003;
+
+          // 3D Reload animation for bots and other players
+          const isReloading = (rig as any).isReloading;
+          if (isReloading) {
+            // Tilts right arm holding weapon downwards
+            rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, -Math.PI / 2.2, 0.15);
+            rig.rifle.rotation.x = THREE.MathUtils.lerp(rig.rifle.rotation.x, -0.5, 0.15);
+          } else {
+            rig.rifle.rotation.x = THREE.MathUtils.lerp(rig.rifle.rotation.x, 0, 0.15);
+          }
+
+          if (isMoving) {
+            // Smooth time-based running cycle (perfect 60 FPS sine wave, free of network tick rate gaps)
+            rig.walkTimer += delta * 9.5;
             const legAngle = Math.sin(rig.walkTimer) * 0.65;
 
             // Articulated Leg Running Cycles (Hip & Knee Flexion)
@@ -1167,7 +1264,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             rig.pelvis.position.y = 0.85 + Math.abs(Math.sin(rig.walkTimer * 2)) * 0.04;
             rig.torso.rotation.z = Math.sin(rig.walkTimer) * 0.04;
             rig.leftArm.rotation.x = -legAngle * 0.3;
-            rig.rightArm.rotation.x = legAngle * 0.3;
+            if (!isReloading) {
+              rig.rightArm.rotation.x = legAngle * 0.3;
+            }
           } else {
             // Idle stance recovery
             rig.leftUpperLeg.rotation.x = THREE.MathUtils.lerp(rig.leftUpperLeg.rotation.x, 0, 0.2);
@@ -1177,7 +1276,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             rig.pelvis.position.y = THREE.MathUtils.lerp(rig.pelvis.position.y, 0.85, 0.2);
             rig.torso.rotation.z = THREE.MathUtils.lerp(rig.torso.rotation.z, 0, 0.2);
             rig.leftArm.rotation.x = THREE.MathUtils.lerp(rig.leftArm.rotation.x, 0, 0.2);
-            rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, 0, 0.2);
+            if (!isReloading) {
+              rig.rightArm.rotation.x = THREE.MathUtils.lerp(rig.rightArm.rotation.x, -Math.PI / 4, 0.2);
+            }
           }
         });
 
@@ -1199,13 +1300,26 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
         if (networkSendTimer >= 0.05) {
           networkSendTimer = 0;
           if (wsRef.current?.readyState === WebSocket.OPEN) {
+            const eyeHeight = isCrouchingRef.current ? 1.1 : 1.7;
+            const feetY = camera.position.y - eyeHeight;
             wsRef.current.send(
               JSON.stringify({
                 type: 'MOVE',
                 playerId,
-                position: [camera.position.x, camera.position.y, camera.position.z],
+                position: [camera.position.x, feetY, camera.position.z],
                 rotationY: cameraRotationRef.current.yaw,
                 pitch: cameraRotationRef.current.pitch,
+                inputs: {
+                  forward: keysPressed['KeyW'] || false,
+                  backward: keysPressed['KeyS'] || false,
+                  left: keysPressed['KeyA'] || false,
+                  right: keysPressed['KeyD'] || false,
+                  jump: keysPressed['Space'] || false,
+                  crouch: isCrouchingRef.current || false,
+                  sprint: keysPressed['ShiftLeft'] || false,
+                },
+                sequence: moveSequenceNumRef.current++,
+                timestamp: Date.now(),
               })
             );
           }

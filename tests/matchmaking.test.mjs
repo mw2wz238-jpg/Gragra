@@ -15,6 +15,7 @@ describe('Vanguard Server Matchmaking Engine (Phases 27, 28, 29 & 30)', () => {
     const status = mm.getQueueStatus('p1');
     assert.equal(status.inQueue, true);
     assert.equal(status.ticket?.ticketId, ticket.ticketId);
+    assert.equal(status.match, undefined);
 
     mm.stopMatchmakingLoop();
   });
@@ -38,6 +39,50 @@ describe('Vanguard Server Matchmaking Engine (Phases 27, 28, 29 & 30)', () => {
     const dequeued = mm.dequeue('p1');
     assert.equal(dequeued, true);
     assert.equal(mm.getQueueStatus('p1').inQueue, false);
+
+    mm.stopMatchmakingLoop();
+  });
+
+  it('should return server-authoritative match details once match is evaluated', () => {
+    const mm = new MatchmakingEngine();
+    
+    // Enqueue player
+    const ticket = mm.enqueue('p_auth_01', 'party_solo', 'VanguardLeader', 'COMPETITIVE', 1284);
+    
+    // Verify status before match evaluation
+    const statusBefore = mm.getQueueStatus('p_auth_01');
+    assert.equal(statusBefore.inQueue, true);
+    assert.equal(statusBefore.match, undefined);
+
+    // Force match creation directly to simulate evaluation
+    mm.createMatch('COMPETITIVE', [ticket]);
+
+    // Verify status after match evaluation
+    const statusAfter = mm.getQueueStatus('p_auth_01');
+    assert.equal(statusAfter.inQueue, false);
+    assert.ok(statusAfter.match);
+    assert.ok(statusAfter.match.matchId);
+    assert.equal(statusAfter.match.mapId, 'industrial_zone');
+    assert.equal(statusAfter.match.mode, 'COMPETITIVE');
+    
+    // Dynamic team resolution
+    assert.equal(statusAfter.match.assignedTeam, 'alpha');
+
+    mm.stopMatchmakingLoop();
+  });
+
+  it('should dynamically assign team depending on team distribution', () => {
+    const mm = new MatchmakingEngine();
+    const t1 = mm.enqueue('p_alpha', 'party1', 'ATK_Spec', 'COMPETITIVE', 1200);
+    const t2 = mm.enqueue('p_omega', 'party2', 'DEF_Spec', 'COMPETITIVE', 1200);
+
+    mm.createMatch('COMPETITIVE', [t1, t2]);
+
+    const s1 = mm.getQueueStatus('p_alpha');
+    const s2 = mm.getQueueStatus('p_omega');
+
+    assert.equal(s1.match?.assignedTeam, 'alpha');
+    assert.equal(s2.match?.assignedTeam, 'omega');
 
     mm.stopMatchmakingLoop();
   });
