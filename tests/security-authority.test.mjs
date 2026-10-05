@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { GameSimulation } from '../../src/server/game-simulation.ts';
+import { GameSimulation } from '../src/server/game-simulation.ts';
 
 describe('Server authority settlement regression', () => {
   it('must not expose settlement before MATCH_END', () => {

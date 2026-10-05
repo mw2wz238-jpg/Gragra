@@ -16,7 +16,7 @@ export class AppStateMachine {
     CONTENT_CHECK: ['LOBBY', 'MAP_DOWNLOAD'],
     LOBBY: ['MATCHMAKING', 'CONTENT_CHECK'],
     MATCHMAKING: ['LOBBY', 'MATCH_FOUND'], // LOBBY on cancel
-    MATCH_FOUND: ['MAP_DOWNLOAD', 'LOADING_GAME', 'LOBBY'], // LOBBY on connection error
+    MATCH_FOUND: ['MAP_DOWNLOAD', 'LOADING_GAME', 'IN_GAME', 'LOBBY'], // LOBBY on connection error
     MAP_DOWNLOAD: ['LOADING_GAME', 'LOBBY', 'CONTENT_CHECK'],
     LOADING_GAME: ['IN_GAME', 'LOBBY'],
     IN_GAME: ['MATCH_END', 'LOBBY'], // Emergency abort allowed to LOBBY

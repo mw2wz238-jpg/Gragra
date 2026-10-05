@@ -7,8 +7,9 @@
 import { getMapDefinition } from '../maps/index.ts';
 import type { MapDefinition } from '../shared/types.ts';
 import { RoundStateMachine } from '../shared/state-machine.ts';
-import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundPhase } from '../shared/types.ts';
+import type { AuthoritativeMatchSettlement, DroppedWeaponEntity, GameMode, GrenadeType, RoundPhase } from '../shared/types.ts';
 import { VANGUARD_WEAPONS } from '../shared/types.ts';
+import { VanguardAntiCheat } from './anti-cheat.ts';
 import { VanguardEconomy } from './economy.ts';
 import { GrenadeManager } from './grenades.ts';
 import type { HitboxZone } from './lag-compensation.ts';
@@ -69,6 +70,7 @@ export class GameSimulation {
   public readonly grenadeManager: GrenadeManager;
   public readonly lagComp: LagCompensationBuffer;
   public readonly recoilCtrl: RecoilController;
+  public readonly antiCheat: VanguardAntiCheat;
   public droppedWeapons: Map<string, DroppedWeaponEntity> = new Map();
   public players: Map<string, SimPlayer> = new Map();
   public bombState: BombState = {
@@ -81,6 +83,7 @@ export class GameSimulation {
   };
 
   public phaseTimeRemainingSec = 15; // Initial buy phase
+  private readonly startedAt = Date.now();
   private tickInterval: NodeJS.Timeout | null = null;
   private onStateBroadcastListeners: Array<(snapshot: any) => void> = [];
   private onKillListeners: Array<(event: any) => void> = [];
@@ -98,6 +101,7 @@ export class GameSimulation {
     this.grenadeManager = new GrenadeManager();
     this.lagComp = new LagCompensationBuffer();
     this.recoilCtrl = new RecoilController();
+    this.antiCheat = new VanguardAntiCheat();
   }
 
   public initPlayers(playersList: Array<{ id: string; username: string; team: 'alpha' | 'omega'; isBot: boolean }>) {
@@ -115,6 +119,8 @@ export class GameSimulation {
         s.position[1],
         s.position[2] + (Math.random() - 0.5) * 1.5,
       ];
+
+      this.antiCheat.initPlayer(p.id, initialPos);
 
       this.players.set(p.id, {
         id: p.id,
@@ -314,6 +320,23 @@ export class GameSimulation {
       p.spectatingTargetId = null;
       p.cash = this.economy.getBalance(p.id);
 
+      if (p.isBot) {
+        if (p.cash >= 3100) {
+          this.handlePlayerBuy(p.id, 'vanguard_rifle');
+          this.handlePlayerBuy(p.id, 'item_kevlar_helmet');
+          this.handlePlayerBuy(p.id, 'grenade_he');
+          this.handlePlayerBuy(p.id, 'grenade_smoke');
+        } else if (p.cash >= 2700) {
+          this.handlePlayerBuy(p.id, 'vanguard_rifle');
+          this.handlePlayerBuy(p.id, 'item_kevlar');
+        } else if (p.cash >= 1500) {
+          this.handlePlayerBuy(p.id, 'vanguard_smg');
+          this.handlePlayerBuy(p.id, 'item_kevlar');
+        } else if (p.cash >= 650) {
+          this.handlePlayerBuy(p.id, 'item_kevlar');
+        }
+      }
+
       const weapon = VANGUARD_WEAPONS[p.equippedWeaponId] || VANGUARD_WEAPONS.vanguard_rifle;
       p.ammoInMag = weapon.magazineSize;
       p.reserveAmmo = weapon.reserveAmmo;
@@ -344,7 +367,11 @@ export class GameSimulation {
     const clampedY = Math.max(0.5, Math.min(bMax[1], pos[1]));
     const clampedZ = Math.max(bMin[2] + 2, Math.min(bMax[2] - 2, pos[2]));
 
-    player.position = [clampedX, clampedY, clampedZ];
+    // Anti-cheat movement validation (speed-hack, fly-hack, teleportation)
+    const moveVal = this.antiCheat.validateMovement(playerId, [clampedX, clampedY, clampedZ]);
+    this.antiCheat.validateAimRotation(playerId, rotY, pitch);
+
+    player.position = moveVal.correctedPos;
     player.rotationY = rotY;
     player.pitch = pitch;
   }
@@ -363,6 +390,12 @@ export class GameSimulation {
 
     // 1. Can shoot check (only during LIVE phase)
     if (!this.roundSM.canShoot()) {
+      return { hit: false };
+    }
+
+    // 2. Anti-cheat shot origin proximity check
+    const originCheck = this.antiCheat.validateShotOrigin(playerId, player.position, origin);
+    if (!originCheck.valid) {
       return { hit: false };
     }
 
@@ -662,24 +695,69 @@ export class GameSimulation {
   private stepBots() {
     if (this.roundSM.getPhase() !== 'LIVE') return;
 
+    const siteA = this.mapDefinition.objectives[0]?.position || [16, 0.5, -16];
+    const siteB = this.mapDefinition.objectives[1]?.position || [-16, 0.5, 16];
+
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.isAlive) continue;
 
-      // Tactical patrol movement toward objectives
-      const targetObjPos = bot.team === 'alpha'
-        ? (this.mapDefinition.objectives[0]?.position || [16, 0.5, -16])
-        : [0, 0.5, 0];
-      const dirX = targetObjPos[0] - bot.position[0];
-      const dirZ = targetObjPos[2] - bot.position[2];
+      let targetPos: [number, number, number];
+
+      if (this.bombState.isPlanted && this.bombState.position) {
+        // Bomb is planted:
+        if (bot.team === 'omega') {
+          // Defenders rush to defuse the bomb
+          targetPos = this.bombState.position;
+          const bdx = targetPos[0] - bot.position[0];
+          const bdz = targetPos[2] - bot.position[2];
+          const distToBomb = Math.sqrt(bdx * bdx + bdz * bdz);
+          if (distToBomb < 2.5 && !this.bombState.isDefused && !this.bombState.isExploded) {
+            this.handleDefuseBomb(bot.id);
+          }
+        } else {
+          // Attackers hold defensive perimeter around the bomb site
+          const angle = (parseInt(bot.id.replace(/\D/g, '')) || 1) * 1.25;
+          targetPos = [
+            this.bombState.position[0] + Math.cos(angle) * 5,
+            this.bombState.position[1],
+            this.bombState.position[2] + Math.sin(angle) * 5,
+          ];
+        }
+      } else {
+        // Bomb not planted yet:
+        // Split bot squads between Site A and Site B
+        const botNum = parseInt(bot.id.replace(/\D/g, '')) || 1;
+        const assignedSite = botNum % 2 === 1 ? siteA : siteB;
+        targetPos = assignedSite;
+
+        if (bot.team === 'alpha') {
+          const adx = targetPos[0] - bot.position[0];
+          const adz = targetPos[2] - bot.position[2];
+          const distToSite = Math.sqrt(adx * adx + adz * adz);
+          if (distToSite < 3.5 && !this.bombState.isPlanted) {
+            const siteType = botNum % 2 === 1 ? 'bombsite_a' : 'bombsite_b';
+            this.handlePlantBomb(bot.id, siteType, bot.position);
+          }
+        }
+      }
+
+      // Move toward target position
+      const dirX = targetPos[0] - bot.position[0];
+      const dirZ = targetPos[2] - bot.position[2];
       const dist = Math.sqrt(dirX * dirX + dirZ * dirZ);
 
-      if (dist > 2) {
-        bot.position[0] += (dirX / dist) * 0.12;
-        bot.position[2] += (dirZ / dist) * 0.12;
+      if (dist > 1.8) {
+        bot.position[0] += (dirX / dist) * 0.13;
+        bot.position[2] += (dirZ / dist) * 0.13;
         bot.rotationY = Math.atan2(dirX, dirZ);
       }
 
-      // Check nearby enemies to shoot
+      // Reload if low/empty magazine and reserve ammo available
+      if (bot.ammoInMag <= 0 && bot.reserveAmmo > 0 && !bot.isReloading) {
+        this.handlePlayerReload(bot.id);
+      }
+
+      // Check nearby enemies to shoot or throw tactical grenades
       for (const enemy of this.players.values()) {
         if (enemy.team === bot.team || !enemy.isAlive) continue;
 
@@ -692,12 +770,59 @@ export class GameSimulation {
         const edz = enemy.position[2] - bot.position[2];
         const edist = Math.sqrt(edx * edx + edz * edz);
 
-        if (edist < 25 && Math.random() < 0.04) {
-          this.handlePlayerFire(bot.id, bot.position, [edx, 0, edz]);
-          break;
+        if (edist < 30) {
+          // Tactical grenade utility throw
+          if (edist > 10 && Math.random() < 0.015) {
+            if (bot.grenades.he > 0) {
+              this.handleThrowGrenade(bot.id, 'HE', bot.position, [edx / edist, 0.35, edz / edist]);
+            } else if (bot.grenades.smoke > 0) {
+              this.handleThrowGrenade(bot.id, 'SMOKE', bot.position, [edx / edist, 0.25, edz / edist]);
+            }
+          }
+
+          // Tactical burst fire
+          if (Math.random() < 0.06 && !bot.isReloading && bot.ammoInMag > 0) {
+            this.handlePlayerFire(bot.id, bot.position, [edx, 0, edz]);
+            break;
+          }
         }
       }
     }
+  }
+
+  public getAuthoritativeSettlement(playerId: string): AuthoritativeMatchSettlement | null {
+    if (this.roundSM.getPhase() !== 'MATCH_END') return null;
+
+    const player = this.players.get(playerId);
+    if (!player) return null;
+
+    const scores = this.roundSM.getScores();
+    const winner =
+      scores.alpha > scores.omega ? 'alpha' :
+      scores.omega > scores.alpha ? 'omega' :
+      null;
+
+    const result =
+      winner === null ? 'DRAW' :
+      player.team === winner ? 'VICTORY' : 'DEFEAT';
+
+    const teammates = Array.from(this.players.values())
+      .filter(p => p.team === player.team);
+
+    const topScore = Math.max(...teammates.map(p => p.score), 0);
+
+    return {
+      matchId: this.matchId,
+      playerId,
+      result,
+      kills: player.kills,
+      deaths: player.deaths,
+      assists: player.assists,
+      headshots: player.headshots,
+      mvp: player.score === topScore && player.score > 0,
+      score: `${scores.alpha}:${scores.omega}`,
+      durationSeconds: Math.max(1, Math.round((Date.now() - this.startedAt) / 1000)),
+    };
   }
 
   private broadcastState() {

@@ -24,6 +24,13 @@ export class VanguardEconomy {
     return this.playerWallets.get(playerId) ?? this.startingCash;
   }
 
+  public addCash(playerId: string, amount: number, _reason?: string): number {
+    const current = this.getBalance(playerId);
+    const updated = Math.min(this.maxCashCap, Math.max(0, current + amount));
+    this.playerWallets.set(playerId, updated);
+    return updated;
+  }
+
   public getLossStreaks() {
     return { ...this.teamLossStreaks };
   }

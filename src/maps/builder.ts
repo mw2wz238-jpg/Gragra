@@ -23,31 +23,164 @@ export interface BuiltMapResult {
  * - South Power Generator Hub (Omega Spawns)
  * - Tactical Cover, Crates, and Elevated Catwalks
  */
+/**
+ * Procedural PBR Canvas Texture Generators for Commercial High Quality Rendering
+ */
+function createAsphaltCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#1e2329';
+    ctx.fillRect(0, 0, 512, 512);
+
+    const imgData = ctx.getImageData(0, 0, 512, 512);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 22;
+      data[i] = Math.max(0, Math.min(255, data[i] + n));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + n));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + n));
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    ctx.strokeStyle = '#12161b';
+    ctx.lineWidth = 3;
+    for (let x = 0; x < 512; x += 128) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(12, 12);
+  return tex;
+}
+
+function createConcreteCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#3d4754';
+    ctx.fillRect(0, 0, 512, 512);
+
+    const imgData = ctx.getImageData(0, 0, 512, 512);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 16;
+      data[i] = Math.max(0, Math.min(255, data[i] + n));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + n));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + n));
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    ctx.strokeStyle = '#2d3542';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(10, 10, 492, 492);
+    ctx.strokeRect(128, 128, 256, 256);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  return tex;
+}
+
+function createContainerCanvasTexture(mainColor: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = mainColor;
+    ctx.fillRect(0, 0, 256, 256);
+
+    for (let x = 0; x < 256; x += 16) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+      ctx.fillRect(x, 0, 6, 256);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+      ctx.fillRect(x + 6, 0, 10, 256);
+    }
+
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 0, 256, 12);
+    ctx.fillRect(0, 244, 256, 12);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 1);
+  return tex;
+}
+
+function createWoodenCrateCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#6b462b';
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = '#4a2d18';
+    ctx.lineWidth = 4;
+    for (let y = 0; y <= 256; y += 64) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(256, y);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#2d3748';
+    ctx.fillRect(0, 0, 48, 48);
+    ctx.fillRect(208, 0, 48, 48);
+    ctx.fillRect(0, 208, 48, 48);
+    ctx.fillRect(208, 208, 48, 48);
+
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText('VG-99', 80, 140);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
 export function buildIndustrialZoneEnvironment(scene: THREE.Scene): BuiltMapResult {
   const colliders: THREE.Object3D[] = [];
 
   // Fog & Atmosphere
   scene.fog = new THREE.FogExp2(0x18202c, 0.014);
 
+  // High Quality Textures
+  const asphaltTex = createAsphaltCanvasTexture();
+  const concreteTex = createConcreteCanvasTexture();
+  const crateTex = createWoodenCrateCanvasTexture();
+
   // Materials
-  const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x22262d, roughness: 0.85, metalness: 0.1 });
-  const concreteMat = new THREE.MeshStandardMaterial({ color: 0x47515e, roughness: 0.8, metalness: 0.05 });
-  const warehouseWallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7, metalness: 0.2 });
+  const asphaltMat = new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.85, metalness: 0.1 });
+  const concreteMat = new THREE.MeshStandardMaterial({ map: concreteTex, roughness: 0.8, metalness: 0.05 });
+  const warehouseWallMat = new THREE.MeshStandardMaterial({ color: 0x334155, map: concreteTex, roughness: 0.7, metalness: 0.2 });
   const warehouseRoofMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.3 });
   const steelGirderMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4, metalness: 0.7 });
   const yellowHazardMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.4, metalness: 0.2 });
   const orangeCraneMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5, metalness: 0.4 });
   const pipeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.3, metalness: 0.8 });
   const siloMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.4, metalness: 0.5 });
-  const crateMat = new THREE.MeshStandardMaterial({ color: 0x785536, roughness: 0.85 });
+  const crateMat = new THREE.MeshStandardMaterial({ map: crateTex, roughness: 0.85 });
 
-  // Shipping Container Materials
+  // Corrugated Shipping Container Materials
   const containerMats = [
-    new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6, metalness: 0.2 }), // Rust Red
-    new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.6, metalness: 0.2 }), // Industrial Blue
-    new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.6, metalness: 0.2 }), // Cargo Green
-    new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.6, metalness: 0.2 }), // Hazard Amber
-    new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6, metalness: 0.2 }), // Slate Grey
+    new THREE.MeshStandardMaterial({ map: createContainerCanvasTexture('#b91c1c'), roughness: 0.6, metalness: 0.2 }),
+    new THREE.MeshStandardMaterial({ map: createContainerCanvasTexture('#1d4ed8'), roughness: 0.6, metalness: 0.2 }),
+    new THREE.MeshStandardMaterial({ map: createContainerCanvasTexture('#15803d'), roughness: 0.6, metalness: 0.2 }),
+    new THREE.MeshStandardMaterial({ map: createContainerCanvasTexture('#d97706'), roughness: 0.6, metalness: 0.2 }),
+    new THREE.MeshStandardMaterial({ map: createContainerCanvasTexture('#475569'), roughness: 0.6, metalness: 0.2 }),
   ];
 
   // Bombsite Hologram Materials
@@ -258,9 +391,9 @@ export function buildIndustrialZoneEnvironment(scene: THREE.Scene): BuiltMapResu
   railTracks.add(railLeft, railRight);
   scene.add(railTracks);
 
-  // Freight Wagon (Cover near Alpha Spawn)
+  // Freight Wagon (Tactical Cover along the tracks)
   const wagon = new THREE.Mesh(new THREE.BoxGeometry(3.2, 3.0, 10.0), warehouseWallMat);
-  wagon.position.set(-35, 1.6, -35);
+  wagon.position.set(-35, 1.6, -22);
   wagon.castShadow = true;
   wagon.receiveShadow = true;
   scene.add(wagon);

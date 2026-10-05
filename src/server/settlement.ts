@@ -4,7 +4,7 @@
  * Atomic & Idempotent Rewards Engine
  */
 
-import type { MatchEndSettlementRequest, MatchEndSettlementResponse, MatchHistoryEntry, PlayerProfile } from '../shared/types.ts';
+import type { AuthoritativeMatchSettlement, MatchEndSettlementRequest, MatchEndSettlementResponse, MatchHistoryEntry, PlayerProfile } from '../shared/types.ts';
 
 export class SettlementService {
   private profiles: Map<string, PlayerProfile> = new Map();
@@ -45,8 +45,12 @@ export class SettlementService {
    * Atomic, Idempotent Settlement Handler
    * Crucial requirement: No duplicate XP, no duplicate Rating change, no replay.
    */
-  public processMatchSettlement(req: MatchEndSettlementRequest): MatchEndSettlementResponse {
-    const idempotencyKey = req.idempotencyKey || `${req.matchId}_${req.playerId}_settlement`;
+  public processMatchSettlement(
+    req: AuthoritativeMatchSettlement | MatchEndSettlementRequest,
+    explicitIdempotencyKey?: string
+  ): MatchEndSettlementResponse {
+    const rawKey = explicitIdempotencyKey || ('idempotencyKey' in req ? req.idempotencyKey : undefined);
+    const idempotencyKey = rawKey || `${req.matchId}_${req.playerId}_settlement`;
 
     // 1. Idempotency Check
     const cached = this.processedSettlements.get(idempotencyKey);

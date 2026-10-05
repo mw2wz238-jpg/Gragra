@@ -18,20 +18,20 @@ export const INDUSTRIAL_ZONE_MAP: MapDefinition = {
   supportedModes: ['COMPETITIVE', 'CASUAL', 'TDM', 'DEATHMATCH'],
   teamSpawns: {
     alpha: [
-      // Taskforce Alpha (Attackers) - Spawns at North Railroad & Loading Terminal
-      { id: 'alpha_spawn_1', team: 'alpha', position: [-35, 0.5, -35], rotation: 0.78 },
-      { id: 'alpha_spawn_2', team: 'alpha', position: [-32, 0.5, -38], rotation: 0.78 },
-      { id: 'alpha_spawn_3', team: 'alpha', position: [-38, 0.5, -32], rotation: 0.78 },
-      { id: 'alpha_spawn_4', team: 'alpha', position: [-30, 0.5, -40], rotation: 0.78 },
-      { id: 'alpha_spawn_5', team: 'alpha', position: [-40, 0.5, -30], rotation: 0.78 },
+      // Taskforce Alpha (Attackers) - Spawns at North Railroad Yard (Clear Open Area)
+      { id: 'alpha_spawn_1', team: 'alpha', position: [-35, 0.5, -42], rotation: 0 },
+      { id: 'alpha_spawn_2', team: 'alpha', position: [-31, 0.5, -42], rotation: 0 },
+      { id: 'alpha_spawn_3', team: 'alpha', position: [-39, 0.5, -42], rotation: 0 },
+      { id: 'alpha_spawn_4', team: 'alpha', position: [-27, 0.5, -45], rotation: 0 },
+      { id: 'alpha_spawn_5', team: 'alpha', position: [-43, 0.5, -45], rotation: 0 },
     ],
     omega: [
-      // Apex Security (Defenders) - Spawns at South Generator & Administrative Hub
-      { id: 'omega_spawn_1', team: 'omega', position: [35, 0.5, 35], rotation: -2.35 },
-      { id: 'omega_spawn_2', team: 'omega', position: [32, 0.5, 38], rotation: -2.35 },
-      { id: 'omega_spawn_3', team: 'omega', position: [38, 0.5, 32], rotation: -2.35 },
-      { id: 'omega_spawn_4', team: 'omega', position: [30, 0.5, 40], rotation: -2.35 },
-      { id: 'omega_spawn_5', team: 'omega', position: [40, 0.5, 30], rotation: -2.35 },
+      // Apex Security (Defenders) - Spawns at South Generator Yard (Clear Open Area)
+      { id: 'omega_spawn_1', team: 'omega', position: [35, 0.5, 42], rotation: 3.14 },
+      { id: 'omega_spawn_2', team: 'omega', position: [31, 0.5, 42], rotation: 3.14 },
+      { id: 'omega_spawn_3', team: 'omega', position: [39, 0.5, 42], rotation: 3.14 },
+      { id: 'omega_spawn_4', team: 'omega', position: [27, 0.5, 45], rotation: 3.14 },
+      { id: 'omega_spawn_5', team: 'omega', position: [43, 0.5, 45], rotation: 3.14 },
     ],
   },
   dmSpawns: [

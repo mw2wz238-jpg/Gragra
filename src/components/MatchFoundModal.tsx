@@ -3,7 +3,7 @@
  * Phases 30 & 31 Implementation
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MatchSessionInfo } from '../shared/types.ts';
 
 interface MatchFoundModalProps {
@@ -14,18 +14,20 @@ interface MatchFoundModalProps {
 export const MatchFoundModal: React.FC<MatchFoundModalProps> = ({ match, onDeploy }) => {
   const [countdown, setCountdown] = useState(4);
   const [contentStatus, setContentStatus] = useState<'CHECKING' | 'VERIFIED'>('CHECKING');
+  const onDeployRef = useRef(onDeploy);
+  onDeployRef.current = onDeploy;
 
   useEffect(() => {
     // Simulate fast local VCDS hash audit for the map
     const hashAuditTimer = setTimeout(() => {
       setContentStatus('VERIFIED');
-    }, 1200);
+    }, 800);
 
     const timer = setInterval(() => {
       setCountdown((c) => {
         if (c <= 1) {
           clearInterval(timer);
-          onDeploy();
+          setTimeout(() => onDeployRef.current(), 50);
           return 0;
         }
         return c - 1;
@@ -36,7 +38,7 @@ export const MatchFoundModal: React.FC<MatchFoundModalProps> = ({ match, onDeplo
       clearTimeout(hashAuditTimer);
       clearInterval(timer);
     };
-  }, [onDeploy]);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-6 select-none animate-fade-in">
