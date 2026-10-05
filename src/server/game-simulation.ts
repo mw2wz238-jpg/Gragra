@@ -96,9 +96,33 @@ export class GameSimulation {
   private onKillListeners: Array<(event: any) => void> = [];
   private onMatchEndListeners: Array<(winner: 'alpha' | 'omega') => void> = [];
   private onPlayerActionListeners: Array<(event: any) => void> = [];
+  
+  public onStateBroadcast(cb: (snapshot: any) => void): () => void {
+    this.onStateBroadcastListeners.push(cb);
+    return () => {
+      this.onStateBroadcastListeners = this.onStateBroadcastListeners.filter(l => l !== cb);
+    };
+  }
 
-  public onPlayerAction(cb: (event: any) => void) {
+  public onKill(cb: (event: any) => void): () => void {
+    this.onKillListeners.push(cb);
+    return () => {
+      this.onKillListeners = this.onKillListeners.filter(l => l !== cb);
+    };
+  }
+
+  public onMatchEnd(cb: (winner: 'alpha' | 'omega') => void): () => void {
+    this.onMatchEndListeners.push(cb);
+    return () => {
+      this.onMatchEndListeners = this.onMatchEndListeners.filter(l => l !== cb);
+    };
+  }
+
+  public onPlayerAction(cb: (event: any) => void): () => void {
     this.onPlayerActionListeners.push(cb);
+    return () => {
+      this.onPlayerActionListeners = this.onPlayerActionListeners.filter(l => l !== cb);
+    };
   }
 
   public broadcastPlayerAction(event: any) {
@@ -174,16 +198,53 @@ export class GameSimulation {
     this.startSimulationTick();
   }
 
-  public onBroadcast(cb: (snapshot: any) => void) {
-    this.onStateBroadcastListeners.push(cb);
+  public onBroadcast(cb: (snapshot: any) => void): () => void {
+    return this.onStateBroadcast(cb);
   }
 
-  public onKill(cb: (event: any) => void) {
-    this.onKillListeners.push(cb);
-  }
+  public addPlayer(p: { id: string; username: string; team: 'alpha' | 'omega'; isBot: boolean }) {
+    if (this.players.has(p.id)) return;
+    
+    this.economy.initPlayer(p.id);
+    const defaultWeapon = VANGUARD_WEAPONS.vanguard_rifle;
+    const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+    const initialPos: [number, number, number] = [
+      spawns[0].position[0] + (Math.random() - 0.5) * 1.5,
+      spawns[0].position[1],
+      spawns[0].position[2] + (Math.random() - 0.5) * 1.5,
+    ];
 
-  public onMatchEnd(cb: (winner: 'alpha' | 'omega') => void) {
-    this.onMatchEndListeners.push(cb);
+    this.antiCheat.initPlayer(p.id, initialPos);
+
+    this.players.set(p.id, {
+      id: p.id,
+      username: p.username,
+      team: p.team,
+      isBot: p.isBot,
+      position: initialPos,
+      rotationY: spawns[0].rotation,
+      pitch: 0,
+      health: 100,
+      armor: 100,
+      cash: 800,
+      isAlive: true,
+      isDefusing: false,
+      isPlanting: false,
+      equippedWeaponId: 'vanguard_rifle',
+      ammoInMag: defaultWeapon.magazineSize,
+      reserveAmmo: defaultWeapon.reserveAmmo,
+      lastShotTime: 0,
+      isReloading: false,
+      reloadEndTime: 0,
+      kills: 0,
+      deaths: 0,
+      assists: 0,
+      headshots: 0,
+      score: 0,
+      ping: p.isBot ? 0 : 24,
+      grenades: { he: 1, smoke: 1, flash: 1 },
+      spectatingTargetId: null,
+    });
   }
 
   public startSimulationTick() {

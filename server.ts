@@ -16,6 +16,7 @@ import { vanguardInventoryService } from './src/server/inventory.ts';
 import { SettlementService } from './src/server/settlement.ts';
 import { AUTHORITATIVE_MANIFEST } from './src/vcds/manifest.ts';
 import { testConnection, closeDatabase } from './src/db/client.ts';
+import { runMigrations } from './src/db/migrate.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,25 +145,25 @@ app.post('/api/auth/logout', (req: any, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/profile', (req: any, res) => {
+app.get('/api/profile', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
-  const profile = settlementService.getOrCreateProfile(playerId);
+  const profile = await settlementService.getOrCreateProfile(playerId);
   res.json(profile);
 });
 
-app.post('/api/profile/update', (req: any, res) => {
+app.post('/api/profile/update', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { username, equippedWeaponId } = req.body;
-  const updated = settlementService.updateProfileSettings(playerId, {
+  const updated = await settlementService.updateProfileSettings(playerId, {
     username,
     equippedWeaponId,
   });
   res.json(updated);
 });
 
-app.get('/api/match-history', (req: any, res) => {
+app.get('/api/match-history', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
-  const history = settlementService.getMatchHistory(playerId);
+  const history = await settlementService.getMatchHistory(playerId);
   res.json(history);
 });
 
@@ -193,7 +194,7 @@ app.post('/api/matchmaking/cancel', (req: any, res) => {
   res.json({ success });
 });
 
-app.post('/api/match/:matchId/settle', (req: any, res) => {
+app.post('/api/match/:matchId/settle', async (req: any, res) => {
   const { matchId } = req.params;
   const playerId = getPlayerIdFromSession(req);
   const { idempotencyKey } = req.body;
@@ -208,7 +209,7 @@ app.post('/api/match/:matchId/settle', (req: any, res) => {
     return res.status(409).json({ error: 'Match is not in MATCH_END phase or player not in match' });
   }
 
-  const settlement = settlementService.processMatchSettlement(authoritativeSettlement, idempotencyKey);
+  const settlement = await settlementService.processMatchSettlement(authoritativeSettlement, idempotencyKey);
 
   // Award match credits to player wallet on server
   if (settlement.success) {
@@ -334,38 +335,50 @@ wss.on('connection', (ws: WebSocket, req: any) => {
             { id: 'bot_omega_5', username: 'Apex-Frost', team: 'omega', isBot: true },
           ]);
           activeSimulations.set(msg.matchId, sim);
-        }
-
-        if (!sim.players.has(boundPlayerId)) {
-          ws.send(JSON.stringify({ type: 'ERROR', message: 'Player not in match roster' }));
-          return;
+        } else {
+          // Allow dynamic joining to existing auto-created/test simulation if player not present
+          if (!sim.players.has(boundPlayerId)) {
+            sim.addPlayer({
+              id: boundPlayerId,
+              username: msg.username || 'Vanguard_Reinforcement',
+              team: 'omega', // Join Omega if Alpha is full or by default
+              isBot: false,
+            });
+          }
         }
 
         boundMatchId = msg.matchId;
 
-        // Attach broadcast listener to send simulation state to this socket
-        sim.onBroadcast((snapshot) => {
+        // Attach broadcast listeners with unregister support to prevent memory leaks on reconnect
+        const unsubBroadcast = sim.onBroadcast((snapshot) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'SNAPSHOT', snapshot }));
           }
         });
 
-        sim.onKill((killEvent) => {
+        const unsubKill = sim.onKill((killEvent) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'KILL_EVENT', killEvent }));
           }
         });
 
-        sim.onMatchEnd((winner) => {
+        const unsubEnd = sim.onMatchEnd((winner) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'MATCH_OVER', winner }));
           }
         });
 
-        sim.onPlayerAction((action) => {
+        const unsubAction = sim.onPlayerAction((action) => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'PLAYER_ACTION', action }));
           }
+        });
+
+        ws.on('close', () => {
+          unsubBroadcast();
+          unsubKill();
+          unsubEnd();
+          unsubAction();
         });
 
         ws.send(JSON.stringify({ type: 'JOIN_OK', matchId: msg.matchId }));
@@ -442,7 +455,12 @@ async function setupVite() {
 
 setupVite().then(async () => {
   // Test PostgreSQL connection before starting server
-  await testConnection();
+  const dbConnected = await testConnection();
+  
+  if (dbConnected) {
+    // Run database migrations automatically
+    await runMigrations();
+  }
 
   server.listen(PORT, () => {
     console.log(`[Project Vanguard] Server running authoritative simulation on port ${PORT}`);

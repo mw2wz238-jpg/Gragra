@@ -244,13 +244,59 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
       return highestSurfaceY;
     };
 
+    const resolveCollisions = (pos: THREE.Vector3, crouch: boolean): THREE.Vector3 => {
+      const pRadius = 0.38;
+      const eyeHeight = crouch ? 1.1 : 1.7;
+      const bodyHeight = crouch ? 1.0 : 1.6;
+      
+      let resPos = pos.clone();
+
+      for (let iteration = 0; iteration < 2; iteration++) {
+        const feetY = resPos.y - eyeHeight;
+        const playerBox = new THREE.Box3(
+          new THREE.Vector3(resPos.x - pRadius, feetY + 0.38, resPos.z - pRadius),
+          new THREE.Vector3(resPos.x + pRadius, feetY + bodyHeight, resPos.z + pRadius)
+        );
+
+        let collided = false;
+        for (let i = 0; i < obstacleBoxes.length; i++) {
+          const box = obstacleBoxes[i];
+          if (box.max.y - box.min.y < 0.15 && box.max.y <= 0.1) continue;
+
+          if (playerBox.intersectsBox(box)) {
+            collided = true;
+            // Calculate overlap on each axis
+            const overlapX = Math.min(playerBox.max.x - box.min.x, box.max.x - playerBox.min.x);
+            const overlapZ = Math.min(playerBox.max.z - box.min.z, box.max.z - playerBox.min.z);
+
+            if (overlapX < overlapZ) {
+              if (resPos.x > (box.min.x + box.max.x) / 2) {
+                resPos.x += overlapX + 0.001;
+              } else {
+                resPos.x -= overlapX + 0.001;
+              }
+            } else {
+              if (resPos.z > (box.min.z + box.max.z) / 2) {
+                resPos.z += overlapZ + 0.001;
+              } else {
+                resPos.z -= overlapZ + 0.001;
+              }
+            }
+            // Early break to re-check after push-out
+            break; 
+          }
+        }
+        if (!collided) break;
+      }
+      return resPos;
+    };
+
     const checkWallCollision = (px: number, py: number, pz: number, crouch: boolean): boolean => {
       const pRadius = 0.38;
       const eyeHeight = crouch ? 1.1 : 1.7;
       const feetY = py - eyeHeight;
       const bodyHeight = crouch ? 1.0 : 1.6;
 
-      // Body bounding box starts 0.38m above feet to allow stepping up onto small obstacles and ramps
       const playerBox = new THREE.Box3(
         new THREE.Vector3(px - pRadius, feetY + 0.38, pz - pRadius),
         new THREE.Vector3(px + pRadius, feetY + bodyHeight, pz + pRadius)
@@ -258,12 +304,8 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
 
       for (let i = 0; i < obstacleBoxes.length; i++) {
         const box = obstacleBoxes[i];
-        // Ignore thin flat ground planes (y <= 0.1)
         if (box.max.y - box.min.y < 0.15 && box.max.y <= 0.1) continue;
-
-        if (playerBox.intersectsBox(box)) {
-          return true;
-        }
+        if (playerBox.intersectsBox(box)) return true;
       }
       return false;
     };
@@ -1104,20 +1146,17 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
         // Apply gravity acceleration
         velocity.y -= 14.0 * delta;
 
-        // Axis-Separated Candidate Movement with Wall Collision Clamping
-        const candX = camera.position.x + velocity.x * delta;
-        if (!checkWallCollision(candX, camera.position.y, camera.position.z, isCrouchingRef.current)) {
-          camera.position.x = candX;
-        } else {
-          velocity.x = 0;
-        }
+        // Apply Candidate Movement with Robust Collision Resolution
+        camera.position.x += velocity.x * delta;
+        camera.position.z += velocity.z * delta;
 
-        const candZ = camera.position.z + velocity.z * delta;
-        if (!checkWallCollision(camera.position.x, camera.position.y, candZ, isCrouchingRef.current)) {
-          camera.position.z = candZ;
-        } else {
-          velocity.z = 0;
-        }
+        const resolvedPos = resolveCollisions(camera.position, isCrouchingRef.current);
+        camera.position.x = resolvedPos.x;
+        camera.position.z = resolvedPos.z;
+
+        // Reset velocity component if blocked
+        if (Math.abs(camera.position.x - resolvedPos.x) > 0.001) velocity.x = 0;
+        if (Math.abs(camera.position.z - resolvedPos.z) > 0.001) velocity.z = 0;
 
         // Apply Y vertical movement
         camera.position.y += velocity.y * delta;

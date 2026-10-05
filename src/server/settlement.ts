@@ -5,54 +5,38 @@
  */
 
 import type { AuthoritativeMatchSettlement, MatchEndSettlementRequest, MatchEndSettlementResponse, MatchHistoryEntry, PlayerProfile } from '../shared/types.ts';
+import { vanguardRepository } from '../db/repository.ts';
 
 export class SettlementService {
-  private profiles: Map<string, PlayerProfile> = new Map();
-  private matchHistory: Map<string, MatchHistoryEntry[]> = new Map();
   private processedSettlements: Map<string, MatchEndSettlementResponse> = new Map();
 
-  constructor() {
-    // Seed default demo profile for session
-    this.createDefaultProfile('player_vanguard_01', 'Vanguard_Commander');
+  constructor() {}
+
+  public async getOrCreateProfile(playerId: string, defaultName = 'Vanguard_Operator'): Promise<PlayerProfile> {
+    return await vanguardRepository.getOrCreateProfile(playerId, defaultName);
   }
 
-  public getOrCreateProfile(playerId: string, defaultName = 'Vanguard_Operator'): PlayerProfile {
-    let profile = this.profiles.get(playerId);
-    if (!profile) {
-      profile = this.createDefaultProfile(playerId, defaultName);
-    }
-    return { ...profile };
+  public async updateProfileSettings(playerId: string, updates: Partial<PlayerProfile>): Promise<PlayerProfile> {
+    await vanguardRepository.updateProfile(playerId, updates);
+    return await this.getOrCreateProfile(playerId);
   }
 
-  public updateProfileSettings(playerId: string, updates: Partial<PlayerProfile>): PlayerProfile {
-    const profile = this.getOrCreateProfile(playerId);
-    if (updates.username && updates.username.trim().length >= 3) {
-      profile.username = updates.username.trim().substring(0, 24);
-    }
-    if (updates.equippedWeaponId) {
-      profile.equippedWeaponId = updates.equippedWeaponId;
-    }
-    this.profiles.set(playerId, profile);
-    return { ...profile };
-  }
-
-  public getMatchHistory(playerId: string, limit = 15): MatchHistoryEntry[] {
-    const list = this.matchHistory.get(playerId) || [];
-    return list.slice(0, limit);
+  public async getMatchHistory(playerId: string, limit = 15): Promise<MatchHistoryEntry[]> {
+    return await vanguardRepository.getMatchHistory(playerId, limit);
   }
 
   /**
    * Atomic, Idempotent Settlement Handler
    * Crucial requirement: No duplicate XP, no duplicate Rating change, no replay.
    */
-  public processMatchSettlement(
+  public async processMatchSettlement(
     req: AuthoritativeMatchSettlement | MatchEndSettlementRequest,
     explicitIdempotencyKey?: string
-  ): MatchEndSettlementResponse {
+  ): Promise<MatchEndSettlementResponse> {
     const rawKey = explicitIdempotencyKey || ('idempotencyKey' in req ? req.idempotencyKey : undefined);
     const idempotencyKey = rawKey || `${req.matchId}_${req.playerId}_settlement`;
 
-    // 1. Idempotency Check
+    // 1. Idempotency Check (In-memory cache for speed)
     const cached = this.processedSettlements.get(idempotencyKey);
     if (cached) {
       return {
@@ -61,8 +45,32 @@ export class SettlementService {
       };
     }
 
-    const profile = this.getOrCreateProfile(req.playerId);
+    const profile = await this.getOrCreateProfile(req.playerId);
     const ratingBefore = profile.rating;
+
+    // 1b. Persistent Idempotency Check (Check if match already in history for this player)
+    const history = await vanguardRepository.getMatchHistory(req.playerId, 50);
+    const existingMatch = history.find(h => h.id === req.matchId);
+    if (existingMatch) {
+       return {
+         success: true,
+         idempotent: true,
+         ratingBefore, 
+         ratingAfter: ratingBefore,
+         ratingChange: existingMatch.ratingChange,
+         xpEarned: existingMatch.xpEarned,
+         newLevel: profile.level,
+         newRank: profile.rank,
+         updatedStats: {
+            matches: profile.matches,
+            wins: profile.wins,
+            losses: profile.losses,
+            kills: profile.kills,
+            deaths: profile.deaths,
+            assists: profile.assists,
+         }
+       };
+    }
 
     // 2. Authoritative Elo Rating Calculation
     let ratingDelta = 0;
@@ -83,29 +91,34 @@ export class SettlementService {
     const mvpBonus = req.mvp ? 100 : 0;
     const totalXp = baseMatchXp + combatXp + mvpBonus;
 
-    // Update Profile
-    profile.rating = ratingAfter;
-    profile.xp += totalXp;
-    profile.matches += 1;
-    if (req.result === 'VICTORY') profile.wins += 1;
-    if (req.result === 'DEFEAT') profile.losses += 1;
-    profile.kills += req.kills;
-    profile.deaths += req.deaths;
-    profile.assists += req.assists;
-    profile.headshots += req.headshots;
-    if (req.mvp) profile.mvps += 1;
-    profile.playTimeMinutes += Math.round(req.durationSeconds / 60);
+    // Calculate updated profile state
+    const updatedStats = {
+      rating: ratingAfter,
+      xp: profile.xp + totalXp,
+      matches: profile.matches + 1,
+      wins: profile.wins + (req.result === 'VICTORY' ? 1 : 0),
+      losses: profile.losses + (req.result === 'DEFEAT' ? 1 : 0),
+      kills: profile.kills + req.kills,
+      deaths: profile.deaths + req.deaths,
+      assists: profile.assists + req.assists,
+      headshots: profile.headshots + req.headshots,
+      mvps: profile.mvps + (req.mvp ? 1 : 0),
+      playTimeMinutes: profile.playTimeMinutes + Math.round(req.durationSeconds / 60),
+    };
 
     // Level progression (each level is 1000 XP)
-    profile.level = Math.floor(profile.xp / 1000) + 1;
-    profile.rank = this.getRankTitle(profile.rating);
+    const newLevel = Math.floor(updatedStats.xp / 1000) + 1;
+    const newRank = this.getRankTitle(updatedStats.rating);
 
-    this.profiles.set(req.playerId, profile);
+    // 4. Persistence: Update Profile & Save Match History
+    await vanguardRepository.updateProfile(req.playerId, {
+      ...updatedStats,
+      level: newLevel,
+      rank: newRank
+    });
 
-    // 4. Record Match History
-    const historyEntry: MatchHistoryEntry = {
+    const historyEntry: Omit<MatchHistoryEntry, 'timestamp'> = {
       id: req.matchId,
-      timestamp: Date.now(),
       mode: 'COMPETITIVE',
       mapId: 'vanguard_parking',
       mapName: 'Vanguard Parking Facility',
@@ -120,9 +133,7 @@ export class SettlementService {
       durationSeconds: req.durationSeconds,
     };
 
-    const userHistory = this.matchHistory.get(req.playerId) || [];
-    userHistory.unshift(historyEntry);
-    this.matchHistory.set(req.playerId, userHistory);
+    await vanguardRepository.saveMatchHistory(req.playerId, historyEntry);
 
     const response: MatchEndSettlementResponse = {
       success: true,
@@ -131,15 +142,15 @@ export class SettlementService {
       ratingAfter,
       ratingChange: ratingDelta,
       xpEarned: totalXp,
-      newLevel: profile.level,
-      newRank: profile.rank,
+      newLevel,
+      newRank,
       updatedStats: {
-        matches: profile.matches,
-        wins: profile.wins,
-        losses: profile.losses,
-        kills: profile.kills,
-        deaths: profile.deaths,
-        assists: profile.assists,
+        matches: updatedStats.matches,
+        wins: updatedStats.wins,
+        losses: updatedStats.losses,
+        kills: updatedStats.kills,
+        deaths: updatedStats.deaths,
+        assists: updatedStats.assists,
       },
     };
 
@@ -159,65 +170,5 @@ export class SettlementService {
     if (rating >= 1050) return 'Corporal';
     return 'Private Recruit';
   }
-
-  private createDefaultProfile(id: string, username: string): PlayerProfile {
-    const profile: PlayerProfile = {
-      id,
-      username,
-      level: 4,
-      xp: 3420,
-      rating: 1284,
-      rank: 'Field Specialist',
-      matches: 18,
-      wins: 11,
-      losses: 7,
-      kills: 248,
-      deaths: 172,
-      assists: 64,
-      headshots: 98,
-      mvps: 6,
-      playTimeMinutes: 240,
-      equippedWeaponId: 'vanguard_rifle',
-      walletCoins: 1450,
-    };
-    this.profiles.set(id, profile);
-
-    // Initial match history
-    this.matchHistory.set(id, [
-      {
-        id: 'match_vg_prev_01',
-        timestamp: Date.now() - 3600000 * 2,
-        mode: 'COMPETITIVE',
-        mapId: 'vanguard_parking',
-        mapName: 'Vanguard Parking Facility',
-        result: 'VICTORY',
-        score: '13:9',
-        kills: 21,
-        deaths: 14,
-        assists: 7,
-        headshots: 9,
-        ratingChange: 24,
-        xpEarned: 480,
-        durationSeconds: 1420,
-      },
-      {
-        id: 'match_vg_prev_02',
-        timestamp: Date.now() - 3600000 * 24,
-        mode: 'COMPETITIVE',
-        mapId: 'vanguard_parking',
-        mapName: 'Vanguard Parking Facility',
-        result: 'DEFEAT',
-        score: '10:13',
-        kills: 16,
-        deaths: 15,
-        assists: 4,
-        headshots: 6,
-        ratingChange: -16,
-        xpEarned: 290,
-        durationSeconds: 1310,
-      },
-    ]);
-
-    return profile;
-  }
 }
+

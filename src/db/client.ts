@@ -10,13 +10,22 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Ensure DATABASE_URL is defined
+// Ensure DATABASE_URL is defined and not a placeholder
 const databaseUrl = process.env.DATABASE_URL;
+const isPlaceholder = !databaseUrl || databaseUrl.includes('...') || databaseUrl.includes('placeholder');
 
-if (!databaseUrl) {
-  console.warn('[DB] WARNING: DATABASE_URL is not defined in environment variables.');
-  console.warn('[DB] Persistent data features may be unavailable or limited.');
+if (isPlaceholder) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[DB] CRITICAL: DATABASE_URL is missing or invalid in PRODUCTION mode.');
+    console.error('[DB] Aborting server start to prevent data loss.');
+    process.exit(1);
+  } else {
+    console.warn('[DB] WARNING: DATABASE_URL is not defined or is a placeholder.');
+    console.warn('[DB] Persistent data features will use in-memory fallback (DEV/TEST ONLY).');
+  }
 }
+
+export const isDatabaseAvailable = !isPlaceholder;
 
 /**
  * Shared Database Connection Pool
@@ -37,7 +46,7 @@ export const pool = new Pool({
  * Does not expose credentials in case of failure.
  */
 export async function testConnection(): Promise<boolean> {
-  if (!databaseUrl) return false;
+  if (!isDatabaseAvailable) return false;
 
   try {
     const client = await pool.connect();
