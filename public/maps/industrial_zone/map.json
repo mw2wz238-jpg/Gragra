@@ -1,0 +1,43 @@
+{
+  "id": "industrial_zone",
+  "name": "Industrial Zone",
+  "version": 1,
+  "scale": 1.0,
+  "bounds": {
+    "min": [-50, 0, -50],
+    "max": [50, 16, 50]
+  },
+  "supportedModes": ["COMPETITIVE", "CASUAL", "TDM", "DEATHMATCH"],
+  "teamSpawns": {
+    "alpha": [
+      { "id": "alpha_spawn_1", "team": "alpha", "position": [-35, 0.5, -35], "rotation": 0.78 },
+      { "id": "alpha_spawn_2", "team": "alpha", "position": [-32, 0.5, -38], "rotation": 0.78 },
+      { "id": "alpha_spawn_3", "team": "alpha", "position": [-38, 0.5, -32], "rotation": 0.78 },
+      { "id": "alpha_spawn_4", "team": "alpha", "position": [-30, 0.5, -40], "rotation": 0.78 },
+      { "id": "alpha_spawn_5", "team": "alpha", "position": [-40, 0.5, -30], "rotation": 0.78 }
+    ],
+    "omega": [
+      { "id": "omega_spawn_1", "team": "omega", "position": [35, 0.5, 35], "rotation": -2.35 },
+      { "id": "omega_spawn_2", "team": "omega", "position": [32, 0.5, 38], "rotation": -2.35 },
+      { "id": "omega_spawn_3", "team": "omega", "position": [38, 0.5, 32], "rotation": -2.35 },
+      { "id": "omega_spawn_4", "team": "omega", "position": [30, 0.5, 40], "rotation": -2.35 },
+      { "id": "omega_spawn_5", "team": "omega", "position": [40, 0.5, 30], "rotation": -2.35 }
+    ]
+  },
+  "objectives": [
+    {
+      "id": "bombsite_a",
+      "name": "Bombsite A (Chemical Storage Silos)",
+      "type": "bombsite",
+      "position": [20, 0.5, 18],
+      "radius": 6.0
+    },
+    {
+      "id": "bombsite_b",
+      "name": "Bombsite B (Main Turbine Warehouse)",
+      "type": "bombsite",
+      "position": [-18, 0.5, -18],
+      "radius": 6.0
+    }
+  ]
+}

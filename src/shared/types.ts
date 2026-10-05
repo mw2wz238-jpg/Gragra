@@ -306,6 +306,7 @@ export interface MatchmakingQueueTicket {
   rating: number;
   queuedAt: number;
   region: string;
+  preferredMapId?: string;
 }
 
 export interface MatchSessionInfo {

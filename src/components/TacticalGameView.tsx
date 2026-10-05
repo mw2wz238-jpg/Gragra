@@ -7,13 +7,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { tacticalAudio } from '../audio/tactical-audio.ts';
-import { VANGUARD_PARKING_MAP } from '../maps/definitions/vanguard_parking.ts';
+import { buildIndustrialZoneEnvironment, buildParkingMapEnvironment } from '../maps/builder.ts';
+import { getMapDefinition } from '../maps/index.ts';
 import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundPhase } from '../shared/types.ts';
 import { VANGUARD_GRENADES, VANGUARD_WEAPONS } from '../shared/types.ts';
 
 interface TacticalGameViewProps {
   matchId: string;
   mode: GameMode;
+  mapId?: string;
+  mapName?: string;
   playerId: string;
   username: string;
   assignedTeam: 'alpha' | 'omega';
@@ -33,6 +36,8 @@ interface TacticalGameViewProps {
 export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   matchId,
   mode,
+  mapId = 'industrial_zone',
+  mapName = 'Industrial Zone',
   playerId,
   username,
   assignedTeam,
@@ -96,8 +101,10 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
     scene.fog = new THREE.FogExp2(0x0c1017, 0.025);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
-    const initPos = assignedTeam === 'alpha' ? [-28, 1.7, -28] : [28, 1.7, 28];
-    camera.position.set(initPos[0], initPos[1], initPos[2]);
+    const mapDef = getMapDefinition(mapId || 'industrial_zone');
+    const spawnList = assignedTeam === 'alpha' ? mapDef.teamSpawns.alpha : mapDef.teamSpawns.omega;
+    const initialSpawn = spawnList[0]?.position || (assignedTeam === 'alpha' ? [-35, 0.5, -35] : [35, 0.5, 35]);
+    camera.position.set(initialSpawn[0], initialSpawn[1] + 1.2, initialSpawn[2]);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -123,74 +130,10 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
     camera.add(muzzleFlashLight);
     scene.add(camera);
 
-    // 3. Environment: Build Vanguard Parking Facility
-    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x2b333e, roughness: 0.8, metalness: 0.1 });
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x181e26, roughness: 0.9 });
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x364150, roughness: 0.7, metalness: 0.2 });
-    const cautionMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.5 });
-    const upperDeckMat = new THREE.MeshStandardMaterial({ color: 0x3d4857, roughness: 0.75 });
-    const coverMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6, metalness: 0.3 });
-    const bombsiteAMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-    const bombsiteBMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
-
-    // Ground Floor & Ceiling
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), concreteMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), ceilingMat);
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.y = 10;
-    scene.add(ground, ceiling);
-
-    // Perimeter Walls
-    const wallN = new THREE.Mesh(new THREE.BoxGeometry(80, 10, 1), concreteMat);
-    wallN.position.set(0, 5, -40);
-    const wallS = new THREE.Mesh(new THREE.BoxGeometry(80, 10, 1), concreteMat);
-    wallS.position.set(0, 5, 40);
-    const wallE = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 80), concreteMat);
-    wallE.position.set(40, 5, 0);
-    const wallW = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 80), concreteMat);
-    wallW.position.set(-40, 5, 0);
-    scene.add(wallN, wallS, wallE, wallW);
-
-    // Pillars
-    [[-20, -20], [-20, 0], [-20, 20], [0, -20], [0, 20], [20, -20], [20, 0], [20, 20]].forEach(([px, pz]) => {
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 10, 1.6), pillarMat);
-      pillar.position.set(px, 5, pz);
-      pillar.castShadow = true;
-      pillar.receiveShadow = true;
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.4, 1.65), cautionMat);
-      stripe.position.set(px, 1.2, pz);
-      scene.add(pillar, stripe);
-    });
-
-    // Upper Mezzanine Deck & Ramps
-    const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(36, 0.4, 30), upperDeckMat);
-    upperDeck.position.set(0, 5, 0);
-    upperDeck.receiveShadow = true;
-    const rampEast = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 14), concreteMat);
-    rampEast.position.set(16, 2.5, 0);
-    rampEast.rotation.x = 0.35;
-    const rampWest = new THREE.Mesh(new THREE.BoxGeometry(6, 0.3, 14), concreteMat);
-    rampWest.position.set(-16, 2.5, 0);
-    rampWest.rotation.x = -0.35;
-    scene.add(upperDeck, rampEast, rampWest);
-
-    // Cover Blocks
-    [[14, 0.75, -14], [18, 0.75, -18], [-14, 0.75, 14], [-16, 0.75, 18], [0, 5.75, 0], [6, 5.75, 4], [-6, 5.75, -4]].forEach(([cx, cy, cz]) => {
-      const crate = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.5, 1.8), coverMat);
-      crate.position.set(cx, cy, cz);
-      crate.castShadow = true;
-      crate.receiveShadow = true;
-      scene.add(crate);
-    });
-
-    // Bombsites A & B
-    const siteACyl = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 0.1, 32), bombsiteAMat);
-    siteACyl.position.set(16, 0.05, -16);
-    const siteBCyl = new THREE.Mesh(new THREE.CylinderGeometry(5.0, 5.0, 0.1, 32), bombsiteBMat);
-    siteBCyl.position.set(-14, 5.25, 14);
-    scene.add(siteACyl, siteBCyl);
+    // 3. Environment: Build 3D Map Environment dynamically
+    const builtMap = mapDef.id === 'industrial_zone'
+      ? buildIndustrialZoneEnvironment(scene)
+      : buildParkingMapEnvironment(scene);
 
     // 4. First-Person View Weapon & Grenades
     const fpWeaponGroup = new THREE.Group();
@@ -600,15 +543,17 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           isGrounded = true;
         }
 
-        camera.position.x = Math.max(-38, Math.min(38, camera.position.x));
-        camera.position.z = Math.max(-38, Math.min(38, camera.position.z));
+        const bMin = mapDef.bounds.min;
+        const bMax = mapDef.bounds.max;
+        camera.position.x = Math.max(bMin[0] + 1.5, Math.min(bMax[0] - 1.5, camera.position.x));
+        camera.position.z = Math.max(bMin[2] + 1.5, Math.min(bMax[2] - 1.5, camera.position.z));
 
-        // Bombsite check
-        const distSiteA = Math.hypot(camera.position.x - 16, camera.position.z - -16);
-        const distSiteB = Math.hypot(camera.position.x - -14, camera.position.z - 14);
-        if (distSiteA < 5.0) {
+        // Bombsite check based on dynamic map objectives
+        const distSiteA = Math.hypot(camera.position.x - builtMap.bombsiteAPos[0], camera.position.z - builtMap.bombsiteAPos[2]);
+        const distSiteB = Math.hypot(camera.position.x - builtMap.bombsiteBPos[0], camera.position.z - builtMap.bombsiteBPos[2]);
+        if (distSiteA < 5.5) {
           setInBombsite('Bombsite A');
-        } else if (distSiteB < 5.0) {
+        } else if (distSiteB < 5.5) {
           setInBombsite('Bombsite B');
         } else {
           setInBombsite(null);
@@ -702,7 +647,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
       }
       renderer.dispose();
     };
-  }, [matchId, playerId, assignedTeam, isDead, activeSlot, nearbyDroppedWeapon, inBombsite, bombPlanted, roundPhase, isPlanting]);
+  }, [matchId, mapId, playerId, assignedTeam, isDead, activeSlot, nearbyDroppedWeapon, inBombsite, bombPlanted, roundPhase, isPlanting]);
 
   const handleBuyItem = (itemId: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -785,7 +730,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           <span className={`text-xl font-bold font-mono tabular-nums ${phaseTimeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-white'}`}>
             00:{phaseTimeLeft < 10 ? `0${phaseTimeLeft}` : phaseTimeLeft}
           </span>
-          <span className="text-[9px] font-mono text-slate-500">ROUND {roundNumber}/24</span>
+          <span className="text-[9px] font-mono text-cyan-400/90 font-bold uppercase tracking-wider">{mapName} · RND {roundNumber}/24</span>
         </div>
 
         <div className="flex items-center gap-3">

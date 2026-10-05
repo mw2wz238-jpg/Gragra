@@ -11,6 +11,7 @@ import { MatchFoundModal } from './components/MatchFoundModal.tsx';
 import { MatchmakingOverlay } from './components/MatchmakingOverlay.tsx';
 import { TacticalGameView } from './components/TacticalGameView.tsx';
 import { UpdateScreen } from './components/UpdateScreen.tsx';
+import { getMapDefinition } from './maps/index.ts';
 import { AppStateMachine } from './shared/state-machine.ts';
 import { AppPhase, GameMode, MatchHistoryEntry, MatchSessionInfo, PlayerProfile } from './shared/types.ts';
 import { VCDSManager } from './vcds/client.ts';
@@ -45,6 +46,7 @@ export default function App() {
 
   // Matchmaking & Match Session
   const [activeQueueMode, setActiveQueueMode] = useState<GameMode>('COMPETITIVE');
+  const [activeQueueMap, setActiveQueueMap] = useState<string>('industrial_zone');
   const [playersInQueue, setPlayersInQueue] = useState(7);
   const [activeMatch, setActiveMatch] = useState<MatchSessionInfo | null>(null);
   const [matchEndSummary, setMatchEndSummary] = useState<any>(null);
@@ -95,11 +97,12 @@ export default function App() {
 
     // Simulated match found after short queue
     const matchFoundTimer = setTimeout(() => {
+      const mapDef = getMapDefinition(activeQueueMap);
       const simulatedMatch: MatchSessionInfo = {
         matchId: `match_vg_${Date.now().toString().slice(-4)}`,
         mode: activeQueueMode,
-        mapId: 'vanguard_parking',
-        mapName: 'Vanguard Parking Facility',
+        mapId: mapDef.id,
+        mapName: mapDef.name,
         teams: {
           alpha: {
             id: 'team_alpha',
@@ -138,10 +141,11 @@ export default function App() {
       clearInterval(pollInterval);
       clearTimeout(matchFoundTimer);
     };
-  }, [phase, activeQueueMode, profile]);
+  }, [phase, activeQueueMode, activeQueueMap, profile]);
 
-  const handleStartMatchmaking = (mode: GameMode) => {
+  const handleStartMatchmaking = (mode: GameMode, mapId = 'industrial_zone') => {
     setActiveQueueMode(mode);
+    setActiveQueueMap(mapId);
     fetch('/api/matchmaking/queue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -150,6 +154,7 @@ export default function App() {
         username: profile.username,
         mode,
         rating: profile.rating,
+        preferredMapId: mapId,
       }),
     }).catch(() => {});
 
@@ -251,6 +256,8 @@ export default function App() {
         <TacticalGameView
           matchId={activeMatch.matchId}
           mode={activeMatch.mode}
+          mapId={activeMatch.mapId}
+          mapName={activeMatch.mapName}
           playerId={profile.id}
           username={profile.username}
           assignedTeam={activeMatch.assignedTeam}

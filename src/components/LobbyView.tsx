@@ -5,13 +5,14 @@
 
 import React, { useState } from 'react';
 import { tacticalAudio } from '../audio/tactical-audio.ts';
+import { ALL_VANGUARD_MAPS, getMapDefinition } from '../maps/index.ts';
 import { GameMode, MatchHistoryEntry, PlayerProfile, VANGUARD_WEAPONS } from '../shared/types.ts';
 import { Player3DPreview } from './Player3DPreview.tsx';
 
 interface LobbyViewProps {
   profile: PlayerProfile;
   matchHistory: MatchHistoryEntry[];
-  onStartMatchmaking: (mode: GameMode) => void;
+  onStartMatchmaking: (mode: GameMode, mapId: string) => void;
   onUpdateWeapon: (weaponId: string) => void;
   onUpdateUsername: (newName: string) => void;
 }
@@ -25,7 +26,9 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'PLAY' | 'PROFILE' | 'WEAPONS' | 'HISTORY' | 'SETTINGS'>('PLAY');
   const [selectedMode, setSelectedMode] = useState<GameMode>('COMPETITIVE');
+  const [selectedMapId, setSelectedMapId] = useState<string>('industrial_zone');
   const [showModeModal, setShowModeModal] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
   const [isPartyReady, setIsPartyReady] = useState(true);
   const [partyCodeCopied, setPartyCodeCopied] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -252,19 +255,31 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
         {activeTab === 'PLAY' && (
           <div className="ml-auto w-96 p-8 flex flex-col justify-end z-10 pointer-events-auto">
             <div className="bg-[#111620]/95 backdrop-blur-2xl border border-white/10 rounded-3xl p-6 shadow-2xl">
-              {/* Selected Mode Card */}
+              {/* Selected Mode & Map Protocol Card */}
               <div className="mb-4">
                 <div className="flex justify-between items-center text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1">
                   <span>DEPLOYMENT PROTOCOL</span>
-                  <button
-                    onClick={() => {
-                      tacticalAudio.playUiClick();
-                      setShowModeModal(true);
-                    }}
-                    className="text-cyan-400 hover:underline"
-                  >
-                    CHANGE MODE
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        tacticalAudio.playUiClick();
+                        setShowModeModal(true);
+                      }}
+                      className="text-cyan-400 hover:underline"
+                    >
+                      CHANGE MODE
+                    </button>
+                    <span className="text-slate-600">·</span>
+                    <button
+                      onClick={() => {
+                        tacticalAudio.playUiClick();
+                        setShowMapModal(true);
+                      }}
+                      className="text-amber-400 hover:underline font-bold"
+                    >
+                      CHANGE MAP
+                    </button>
+                  </div>
                 </div>
                 <div className="p-4 bg-slate-900/80 border border-cyan-500/40 rounded-2xl">
                   <div className="flex justify-between items-start">
@@ -276,8 +291,20 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                         {selectedMode === 'DEATHMATCH' && 'FREE FOR ALL'}
                         {selectedMode === 'TRAINING' && 'TACTICAL RANGE'}
                       </h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Map: Vanguard Parking Facility · 13 Rounds to Victory
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-slate-200 font-bold font-['Chakra_Petch'] tracking-wide">
+                          📍 {getMapDefinition(selectedMapId).name}
+                        </span>
+                        {selectedMapId === 'industrial_zone' && (
+                          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[9px] font-mono rounded font-bold">
+                            FEATURED
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                        {selectedMapId === 'industrial_zone'
+                          ? 'Factory Hall · Rail Depot · Chemical Silos'
+                          : 'Multi-Level Urban Concrete Garage'}
                       </p>
                     </div>
                   </div>
@@ -294,7 +321,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
               <button
                 onClick={() => {
                   tacticalAudio.playUiClick();
-                  onStartMatchmaking(selectedMode);
+                  onStartMatchmaking(selectedMode, selectedMapId);
                 }}
                 className="w-full py-5 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black font-['Chakra_Petch'] tracking-widest text-lg rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
@@ -513,6 +540,89 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                     {m.title}
                   </div>
                   <div className="text-xs text-slate-400 font-mono">{m.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MAP SELECTION MODAL */}
+      {showMapModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-6 select-none animate-fade-in">
+          <div className="max-w-2xl w-full bg-[#111620] border border-cyan-500/30 rounded-3xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold font-['Chakra_Petch'] text-cyan-400 uppercase tracking-wider">
+                  Select Tactical Operational Map
+                </h3>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  Authoritative map geometry, 5v5 spawn points, and bombsite objectives
+                </p>
+              </div>
+              <button onClick={() => setShowMapModal(false)} className="text-slate-400 hover:text-white font-mono text-sm">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  id: 'industrial_zone',
+                  name: 'Industrial Zone',
+                  tag: 'FEATURED / USER MAP',
+                  tagColor: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+                  desc: 'Heavy industrial complex featuring the Main Turbine Warehouse, Chemical Silo Yard, giant yellow gantry crane, overhead pipe racks, and North railway terminal.',
+                  bombsites: 'Site A (Silos) · Site B (Turbine)',
+                  layout: 'Long sightlines, elevated catwalks, stacked shipping containers & cover obstacles.',
+                  scale: '100m × 100m (1:1 Normalized Scale)',
+                },
+                {
+                  id: 'vanguard_parking',
+                  name: 'Vanguard Parking Facility',
+                  tag: 'TACTICAL CQB',
+                  tagColor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
+                  desc: 'Multi-story urban parking facility with central mezzanine deck, concrete vehicle ramps, reinforced structural pillars, and tight angular choke points.',
+                  bombsites: 'Site A (Ramp Bay) · Site B (Mezzanine)',
+                  layout: 'Close-quarters combat, multi-elevation ramps, heavy pillar cover.',
+                  scale: '80m × 80m (1:1 Normalized Scale)',
+                },
+              ].map((map) => (
+                <button
+                  key={map.id}
+                  onClick={() => {
+                    tacticalAudio.playUiClick();
+                    setSelectedMapId(map.id);
+                    setShowMapModal(false);
+                  }}
+                  className={`w-full p-5 rounded-2xl text-left border transition-all ${
+                    selectedMapId === map.id
+                      ? 'bg-gradient-to-r from-cyan-950/60 to-slate-900 border-cyan-500 shadow-xl ring-1 ring-cyan-500/40'
+                      : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black font-['Chakra_Petch'] text-base tracking-wide text-white">
+                        {map.name}
+                      </span>
+                      <span className={`px-2 py-0.5 text-[9px] font-mono rounded-full border font-bold ${map.tagColor}`}>
+                        {map.tag}
+                      </span>
+                    </div>
+                    {selectedMapId === map.id && (
+                      <span className="text-cyan-400 font-mono text-xs font-bold flex items-center gap-1">
+                        ● SELECTED
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                    {map.desc}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-400 bg-black/40 p-2.5 rounded-xl border border-white/5">
+                    <div><span className="text-cyan-400 font-bold">Objectives:</span> {map.bombsites}</div>
+                    <div><span className="text-cyan-400 font-bold">Bounds:</span> {map.scale}</div>
+                  </div>
                 </button>
               ))}
             </div>

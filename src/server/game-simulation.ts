@@ -4,6 +4,8 @@
  * Integrated Economy, Grenades, Smoke LoS, Dropped Weapons, and Spectator System
  */
 
+import { getMapDefinition } from '../maps/index.ts';
+import type { MapDefinition } from '../shared/types.ts';
 import { RoundStateMachine } from '../shared/state-machine.ts';
 import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundPhase } from '../shared/types.ts';
 import { VANGUARD_WEAPONS } from '../shared/types.ts';
@@ -84,10 +86,13 @@ export class GameSimulation {
   private onKillListeners: Array<(event: any) => void> = [];
   private onMatchEndListeners: Array<(winner: 'alpha' | 'omega') => void> = [];
 
+  public readonly mapDefinition: MapDefinition;
+
   constructor(matchId: string, mode: GameMode, mapId = 'vanguard_parking') {
     this.matchId = matchId;
     this.mode = mode;
     this.mapId = mapId;
+    this.mapDefinition = getMapDefinition(mapId);
     this.roundSM = new RoundStateMachine(mode === 'COMPETITIVE' ? 24 : 10, mode === 'COMPETITIVE' ? 13 : 5);
     this.economy = new VanguardEconomy(800);
     this.grenadeManager = new GrenadeManager();
@@ -97,12 +102,19 @@ export class GameSimulation {
 
   public initPlayers(playersList: Array<{ id: string; username: string; team: 'alpha' | 'omega'; isBot: boolean }>) {
     this.players.clear();
+    let alphaIdx = 0;
+    let omegaIdx = 0;
     for (const p of playersList) {
       this.economy.initPlayer(p.id);
       const defaultWeapon = VANGUARD_WEAPONS.vanguard_rifle;
-      const initialPos: [number, number, number] = p.team === 'alpha'
-        ? [-28 + Math.random() * 4, 0.5, -28 + Math.random() * 4]
-        : [28 - Math.random() * 4, 0.5, 28 - Math.random() * 4];
+      const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+      const idx = p.team === 'alpha' ? alphaIdx++ : omegaIdx++;
+      const s = spawns[idx % spawns.length];
+      const initialPos: [number, number, number] = [
+        s.position[0] + (Math.random() - 0.5) * 1.5,
+        s.position[1],
+        s.position[2] + (Math.random() - 0.5) * 1.5,
+      ];
 
       this.players.set(p.id, {
         id: p.id,
@@ -110,7 +122,7 @@ export class GameSimulation {
         team: p.team,
         isBot: p.isBot,
         position: initialPos,
-        rotationY: p.team === 'alpha' ? 0.78 : -2.35,
+        rotationY: s.rotation,
         pitch: 0,
         health: 100,
         armor: 100,
@@ -290,6 +302,8 @@ export class GameSimulation {
     this.grenadeManager.activeGrenades.clear();
 
     // Respawn all players at team spawns
+    let alphaIdx = 0;
+    let omegaIdx = 0;
     for (const p of this.players.values()) {
       p.isAlive = true;
       p.health = 100;
@@ -304,13 +318,15 @@ export class GameSimulation {
       p.ammoInMag = weapon.magazineSize;
       p.reserveAmmo = weapon.reserveAmmo;
 
-      if (p.team === 'alpha') {
-        p.position = [-28 + Math.random() * 4, 0.5, -28 + Math.random() * 4];
-        p.rotationY = 0.78;
-      } else {
-        p.position = [28 - Math.random() * 4, 0.5, 28 - Math.random() * 4];
-        p.rotationY = -2.35;
-      }
+      const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+      const idx = p.team === 'alpha' ? alphaIdx++ : omegaIdx++;
+      const s = spawns[idx % spawns.length];
+      p.position = [
+        s.position[0] + (Math.random() - 0.5) * 1.5,
+        s.position[1],
+        s.position[2] + (Math.random() - 0.5) * 1.5,
+      ];
+      p.rotationY = s.rotation;
     }
   }
 
@@ -321,10 +337,12 @@ export class GameSimulation {
     const player = this.players.get(playerId);
     if (!player || !player.isAlive) return;
 
-    // Boundary validation (-38 to +38 on x and z)
-    const clampedX = Math.max(-38, Math.min(38, pos[0]));
-    const clampedY = Math.max(0.5, Math.min(10, pos[1]));
-    const clampedZ = Math.max(-38, Math.min(38, pos[2]));
+    // Map bounds validation (accounting for 2m perimeter wall margin)
+    const bMin = this.mapDefinition.bounds.min;
+    const bMax = this.mapDefinition.bounds.max;
+    const clampedX = Math.max(bMin[0] + 2, Math.min(bMax[0] - 2, pos[0]));
+    const clampedY = Math.max(0.5, Math.min(bMax[1], pos[1]));
+    const clampedZ = Math.max(bMin[2] + 2, Math.min(bMax[2] - 2, pos[2]));
 
     player.position = [clampedX, clampedY, clampedZ];
     player.rotationY = rotY;
@@ -648,7 +666,9 @@ export class GameSimulation {
       if (!bot.isBot || !bot.isAlive) continue;
 
       // Tactical patrol movement toward objectives
-      const targetObjPos = bot.team === 'alpha' ? [16, 0.5, -16] : [0, 0.5, 0];
+      const targetObjPos = bot.team === 'alpha'
+        ? (this.mapDefinition.objectives[0]?.position || [16, 0.5, -16])
+        : [0, 0.5, 0];
       const dirX = targetObjPos[0] - bot.position[0];
       const dirZ = targetObjPos[2] - bot.position[2];
       const dist = Math.sqrt(dirX * dirX + dirZ * dirZ);

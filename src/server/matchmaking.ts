@@ -3,6 +3,7 @@
  * Phases 27, 28, 29 & 30
  */
 
+import { getMapDefinition } from '../maps/index.ts';
 import type { GameMode, MatchmakingQueueTicket, MatchSessionInfo } from '../shared/types.ts';
 
 export class MatchmakingEngine {
@@ -40,7 +41,8 @@ export class MatchmakingEngine {
     username: string,
     mode: GameMode,
     rating: number,
-    region = 'EU'
+    region = 'EU',
+    preferredMapId?: string
   ): MatchmakingQueueTicket {
     // If player already in queue, return existing ticket
     for (const ticket of this.queue.values()) {
@@ -58,6 +60,7 @@ export class MatchmakingEngine {
       rating,
       queuedAt: Date.now(),
       region,
+      preferredMapId,
     };
 
     this.queue.set(ticket.ticketId, ticket);
@@ -165,11 +168,14 @@ export class MatchmakingEngine {
       });
     }
 
+    const chosenMapId = humanTickets[0]?.preferredMapId || 'industrial_zone';
+    const mapDef = getMapDefinition(chosenMapId);
+
     const matchSession: MatchSessionInfo = {
       matchId,
       mode,
-      mapId: 'vanguard_parking',
-      mapName: 'Vanguard Parking Facility',
+      mapId: mapDef.id,
+      mapName: mapDef.name,
       teams: {
         alpha: { id: 'team_alpha', name: 'Taskforce Alpha (ATK)', players: alphaPlayers },
         omega: { id: 'team_omega', name: 'Apex Security (DEF)', players: omegaPlayers },

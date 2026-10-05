@@ -8,7 +8,7 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocket, WebSocketServer } from 'ws';
-import { VANGUARD_PARKING_MAP } from './src/maps/definitions/vanguard_parking.ts';
+import { ALL_VANGUARD_MAPS, getMapDefinition, VANGUARD_PARKING_MAP } from './src/maps/index.ts';
 import { GameSimulation } from './src/server/game-simulation.ts';
 import { MatchmakingEngine } from './src/server/matchmaking.ts';
 import { SettlementService } from './src/server/settlement.ts';
@@ -51,6 +51,15 @@ app.get('/api/content/manifest', (_req, res) => {
   res.json(AUTHORITATIVE_MANIFEST);
 });
 
+app.get('/api/maps', (_req, res) => {
+  res.json(Object.values(ALL_VANGUARD_MAPS));
+});
+
+app.get('/api/map/:mapId', (req, res) => {
+  const mapDef = getMapDefinition(req.params.mapId);
+  res.json(mapDef);
+});
+
 app.get('/api/map/vanguard_parking', (_req, res) => {
   res.json(VANGUARD_PARKING_MAP);
 });
@@ -77,13 +86,15 @@ app.get('/api/match-history', (req, res) => {
 });
 
 app.post('/api/matchmaking/queue', (req, res) => {
-  const { playerId, username, mode, rating } = req.body;
+  const { playerId, username, mode, rating, region, preferredMapId } = req.body;
   const ticket = matchmakingEngine.enqueue(
     playerId || 'player_vanguard_01',
     'party_solo',
     username || 'Vanguard_Operator',
     mode || 'COMPETITIVE',
-    rating || 1200
+    rating || 1200,
+    region || 'EU',
+    preferredMapId || 'industrial_zone'
   );
   res.json({ success: true, ticket });
 });

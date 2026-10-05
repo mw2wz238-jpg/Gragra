@@ -23,13 +23,15 @@ describe('Vanguard Content Delivery System (VCDS) Manifest (Phases 2, 3 & 8)', (
   });
 
   it('should define MATCH_REQUIRED maps with scene and collision files', () => {
-    const mapFiles = AUTHORITATIVE_MANIFEST.files.filter(f => f.id.startsWith('map.vanguard_parking'));
-    assert.ok(mapFiles.length >= 2);
+    const parkingFiles = AUTHORITATIVE_MANIFEST.files.filter(f => f.id.startsWith('map.vanguard_parking'));
+    assert.ok(parkingFiles.length >= 2);
+    assert.ok(parkingFiles.some(f => f.id === 'map.vanguard_parking.scene'));
+    assert.ok(parkingFiles.some(f => f.id === 'map.vanguard_parking.collision'));
 
-    const hasScene = mapFiles.some(f => f.id === 'map.vanguard_parking.scene');
-    const hasCollision = mapFiles.some(f => f.id === 'map.vanguard_parking.collision');
-    assert.ok(hasScene, 'Map must contain scene.glb definition');
-    assert.ok(hasCollision, 'Map must contain collision.glb definition');
+    const industrialFiles = AUTHORITATIVE_MANIFEST.files.filter(f => f.id.startsWith('map.industrial_zone'));
+    assert.ok(industrialFiles.length >= 2);
+    assert.ok(industrialFiles.some(f => f.id === 'map.industrial_zone.scene'));
+    assert.ok(industrialFiles.some(f => f.id === 'map.industrial_zone.collision'));
   });
 
   it('should enforce unique asset IDs across the entire manifest', () => {

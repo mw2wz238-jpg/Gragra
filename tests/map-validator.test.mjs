@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { INDUSTRIAL_ZONE_MAP } from '../src/maps/definitions/industrial_zone.ts';
 import { VANGUARD_PARKING_MAP } from '../src/maps/definitions/vanguard_parking.ts';
 import { validateMapDefinition } from '../src/maps/validator.ts';
 
@@ -9,6 +10,17 @@ describe('Vanguard Map Pipeline & Map Validator (Phases 9 - 18)', () => {
     const result = validateMapDefinition(VANGUARD_PARKING_MAP);
     assert.equal(result.valid, true, `Validation failed with errors: ${JSON.stringify(result.errors)}`);
     assert.equal(result.errors.length, 0);
+  });
+
+  it('should validate imported Industrial Zone map successfully conforming to competitive 5v5 rules', () => {
+    const result = validateMapDefinition(INDUSTRIAL_ZONE_MAP);
+    assert.equal(result.valid, true, `Industrial Zone validation failed: ${JSON.stringify(result.errors)}`);
+    assert.equal(result.errors.length, 0);
+    assert.equal(INDUSTRIAL_ZONE_MAP.scale, 1.0);
+    assert.equal(INDUSTRIAL_ZONE_MAP.teamSpawns.alpha.length, 5);
+    assert.equal(INDUSTRIAL_ZONE_MAP.teamSpawns.omega.length, 5);
+    assert.ok(INDUSTRIAL_ZONE_MAP.objectives.some(o => o.id === 'bombsite_a'));
+    assert.ok(INDUSTRIAL_ZONE_MAP.objectives.some(o => o.id === 'bombsite_b'));
   });
 
   it('should fail if scale normalization is not 1.0 (1 Vanguard Unit = 1 Meter)', () => {
