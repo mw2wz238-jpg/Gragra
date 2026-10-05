@@ -1,0 +1,95 @@
+/**
+ * Vanguard Content Delivery System (VCDS) - Content Manifest
+ * Phase 2, 3 & 8 Implementation
+ */
+
+import type { ContentManifest } from '../shared/types.ts';
+
+export const AUTHORITATIVE_MANIFEST: ContentManifest = {
+  contentVersion: '1.4.2',
+  manifestVersion: 2,
+  timestamp: 1775347200000,
+  files: [
+    {
+      id: 'core.weapons.vanguard_rifle',
+      path: 'assets/weapons/vanguard_rifle.glb',
+      version: 1,
+      size: 142850,
+      sha256: '9f83a45c61234b67890efabcdef1234567890abcdef1234567890abcdef12345',
+      category: 'CORE',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'core.weapons.vanguard_smg',
+      path: 'assets/weapons/vanguard_smg.glb',
+      version: 1,
+      size: 124800,
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      category: 'CORE',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'core.weapons.vanguard_shotgun',
+      path: 'assets/weapons/vanguard_shotgun.glb',
+      version: 1,
+      size: 135400,
+      sha256: 'a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0',
+      category: 'CORE',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'core.weapons.vanguard_pistol',
+      path: 'assets/weapons/vanguard_pistol.glb',
+      version: 1,
+      size: 89600,
+      sha256: 'f5e4d3c2b1a0987654321fedcba0987654321fedcba0987654321fedcba09876',
+      category: 'CORE',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'core.audio.tactical_sfx',
+      path: 'assets/audio/tactical_sfx_bank.bin',
+      version: 1,
+      size: 450000,
+      sha256: 'b4c5d6e7f8091a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b',
+      category: 'CORE',
+      contentType: 'audio/binary',
+    },
+    {
+      id: 'map.vanguard_parking.scene',
+      path: 'maps/vanguard_parking/scene.glb',
+      version: 2,
+      size: 2450000,
+      sha256: '5d41402abc4b2a76b9719d911017c592f80c6855b7f16fa8649887756f709fa5',
+      category: 'MATCH_REQUIRED',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'map.vanguard_parking.collision',
+      path: 'maps/vanguard_parking/collision.glb',
+      version: 2,
+      size: 380000,
+      sha256: '7d793037a0760186574b0282f2f435e70d7168e079e1377c185c190fb2ce003f',
+      category: 'MATCH_REQUIRED',
+      contentType: 'model/gltf-binary',
+    },
+    {
+      id: 'map.vanguard_parking.meta',
+      path: 'maps/vanguard_parking/map.json',
+      version: 2,
+      size: 4500,
+      sha256: '01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b',
+      category: 'MATCH_REQUIRED',
+      contentType: 'application/json',
+    },
+    {
+      id: 'optional.hd_textures',
+      path: 'assets/textures/hd_materials.bin',
+      version: 1,
+      size: 5200000,
+      sha256: '49bc12bc70c02c722e3085a0d4f2051d199961951be021379c5723c304fa409b',
+      category: 'OPTIONAL',
+      contentType: 'application/octet-stream',
+    },
+  ],
+};

@@ -1,0 +1,6 @@
+{
+  "name": "Project Vanguard - Tactical FPS",
+  "description": "Commercial-grade browser 3D tactical multiplayer FPS featuring server-authoritative simulation, VCDS content delivery, competitive matchmaking, and complete round loop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
