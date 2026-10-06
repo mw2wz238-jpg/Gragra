@@ -225,7 +225,7 @@ app.get('/api/inventory', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const inventory = await vanguardInventoryService.getInventory(playerId);
   const wallet = await vanguardRepository.getWallet(playerId);
-  const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
+  const equippedSkins = await vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ success: true, inventory, wallet, equippedSkins });
 });
 

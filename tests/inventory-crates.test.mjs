@@ -16,13 +16,13 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     const playerId = `test_user_01_${Date.now()}`;
     await invService.initPlayer(playerId, 2000);
 
-    const wallet = invService.getWallet(playerId);
+    const wallet = await invService.getWallet(playerId);
     assert.equal(wallet, 2000);
 
     const items = await invService.getInventory(playerId);
     assert.ok(items.length >= 4); // Default issue skins + starter crates
 
-    const equippedRifle = invService.getEquippedSkin(playerId, 'vanguard_rifle');
+    const equippedRifle = await invService.getEquippedSkin(playerId, 'vanguard_rifle');
     assert.equal(equippedRifle, 'skin_ar4_default');
   });
 
@@ -32,12 +32,12 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     await invService.initPlayer(playerId, 1000);
 
     // Initial debit
-    const debitRes = invService.modifyWallet(playerId, 300, 'DEBIT', 'SHOP_PURCHASE', `key_tx_001_${playerId}`);
+    const debitRes = await invService.modifyWallet(playerId, 300, 'DEBIT', 'SHOP_PURCHASE', `key_tx_001_${playerId}`);
     assert.equal(debitRes.success, true);
     assert.equal(debitRes.balanceAfter, 700);
 
     // Replay with identical idempotency key
-    const replayRes = invService.modifyWallet(playerId, 300, 'DEBIT', 'SHOP_PURCHASE', `key_tx_001_${playerId}`);
+    const replayRes = await invService.modifyWallet(playerId, 300, 'DEBIT', 'SHOP_PURCHASE', `key_tx_001_${playerId}`);
     assert.equal(replayRes.success, true);
     assert.equal(replayRes.idempotent, true);
     assert.equal(replayRes.balanceAfter, 700); // Balance unchanged!
@@ -47,7 +47,6 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     const invService = new VanguardInventoryService();
     const playerId = `test_user_poor_${Date.now()}`;
     await invService.initPlayer(playerId, 200);
-    await vanguardRepository.modifyWallet(playerId, 200, 'CREDIT', 'DAILY_BONUS', `init_poor_${playerId}`);
 
     // Try to buy 2200 credits Covert Vulcan skin
     const buyRes = await invService.purchaseShopSkin(playerId, 'skin_ar4_vulcan');
@@ -61,7 +60,6 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     const invService = new VanguardInventoryService();
     const playerId = `test_user_rich_${Date.now()}`;
     await invService.initPlayer(playerId, 5000);
-    await vanguardRepository.modifyWallet(playerId, 5000, 'CREDIT', 'DAILY_BONUS', `init_rich_${playerId}`);
 
     // Buy Covert Vulcan skin
     const buyRes = await invService.purchaseShopSkin(playerId, 'skin_ar4_vulcan', `buy_vulcan_${playerId}`);
@@ -73,7 +71,7 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     const equipRes = await invService.equipSkin(playerId, buyRes.item.instanceId);
     assert.equal(equipRes.success, true);
 
-    const currentSkin = invService.getEquippedSkin(playerId, 'vanguard_rifle');
+    const currentSkin = await invService.getEquippedSkin(playerId, 'vanguard_rifle');
     assert.equal(currentSkin, 'skin_ar4_vulcan');
   });
 
@@ -81,7 +79,6 @@ describe('Vanguard Authoritative Inventory, Ledger & Crate RNG (Sections 19, 20,
     const invService = new VanguardInventoryService();
     const playerId = `test_user_crate_${Date.now()}`;
     await invService.initPlayer(playerId, 3000);
-    await vanguardRepository.modifyWallet(playerId, 3000, 'CREDIT', 'DAILY_BONUS', `init_crate_${playerId}`);
 
     // Buy crate (500 credits)
     const crateBuy = await invService.purchaseCrate(playerId, 'crate_vanguard_ops_01', `buy_crate_${playerId}`);

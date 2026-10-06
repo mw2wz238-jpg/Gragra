@@ -141,10 +141,8 @@ export class VanguardInventoryService {
     await vanguardRepository.addInventoryItem(starterCrate2, playerId);
   }
 
-  public getWallet(playerId: string): number {
-    if (!this.playerInventories.has(playerId)) {
-      this.initPlayer(playerId).catch(() => {});
-    }
+  public async getWallet(playerId: string): Promise<number> {
+    await this.initPlayer(playerId);
     return this.playerWallets.get(playerId) ?? 0;
   }
 
@@ -152,14 +150,14 @@ export class VanguardInventoryService {
     return await this.initPlayer(playerId);
   }
 
-  public getEquippedSkin(playerId: string, weaponId: string): string {
-    this.initPlayer(playerId);
+  public async getEquippedSkin(playerId: string, weaponId: string): Promise<string> {
+    await this.initPlayer(playerId);
     const eq = this.playerEquippedSkins.get(playerId);
     return eq?.get(weaponId) || `skin_${weaponId.replace('vanguard_', '')}_default`;
   }
 
-  public getEquippedSkinsMap(playerId: string): Record<string, string> {
-    this.initPlayer(playerId);
+  public async getEquippedSkinsMap(playerId: string): Promise<Record<string, string>> {
+    await this.initPlayer(playerId);
     const eq = this.playerEquippedSkins.get(playerId);
     const result: Record<string, string> = {};
     if (eq) {
@@ -173,25 +171,25 @@ export class VanguardInventoryService {
   /**
    * Credit or Debit Wallet with atomic Idempotency check & Ledger logging
    */
-  public modifyWallet(
+  public async modifyWallet(
     playerId: string,
     amount: number,
     type: 'CREDIT' | 'DEBIT',
     source: 'MATCH_REWARD' | 'SHOP_PURCHASE' | 'CRATE_OPEN' | 'DAILY_BONUS',
     idempotencyKey?: string
-  ): { success: boolean; balanceAfter: number; idempotent?: boolean; reason?: string } {
-    this.initPlayer(playerId);
+  ): Promise<{ success: boolean; balanceAfter: number; idempotent?: boolean; reason?: string }> {
+    await this.initPlayer(playerId);
 
     const key = idempotencyKey || `tx_${playerId}_${Date.now()}_${Math.random()}`;
     if (this.processedTransactions.has(key)) {
       return {
         success: true,
         idempotent: true,
-        balanceAfter: this.getWallet(playerId),
+        balanceAfter: await this.getWallet(playerId),
       };
     }
 
-    const current = this.getWallet(playerId);
+    const current = await this.getWallet(playerId);
     if (type === 'DEBIT' && current < amount) {
       return {
         success: false,

@@ -24,7 +24,7 @@ describe('ALPHA.66 — Wallet RAM loading from PostgreSQL in initPlayer()', () =
     // Give them exactly 5000 in DB (initPlayer seeds it)
     const dbBal1 = await vanguardRepository.getWallet(playerId);
     assert.equal(dbBal1, 5000, 'DB balance should be initialized to 5000');
-    assert.equal(service1.getWallet(playerId), 5000, 'RAM balance should be 5000');
+    assert.equal(await service1.getWallet(playerId), 5000, 'RAM balance should be 5000');
 
     // Debit 1200 via repository to simulate out-of-band change or previous session save
     await vanguardRepository.modifyWallet(playerId, 1200, 'DEBIT', 'SHOP_PURCHASE', `manual_debit_${playerId}`);
@@ -39,7 +39,7 @@ describe('ALPHA.66 — Wallet RAM loading from PostgreSQL in initPlayer()', () =
     // It MUST load 3800 from DB, not reset to 1500 or keep 5000.
     await service2.initPlayer(playerId, 9999); 
     
-    const ramBalAfterRestart = service2.getWallet(playerId);
+    const ramBalAfterRestart = await service2.getWallet(playerId);
     assert.equal(ramBalAfterRestart, 3800, 'RAM balance MUST be loaded from PostgreSQL (3800), not default or previous RAM state');
   });
 });
