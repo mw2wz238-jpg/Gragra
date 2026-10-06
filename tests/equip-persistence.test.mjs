@@ -32,7 +32,7 @@ describe('ALPHA.62 — Equip Skin PostgreSQL Persistence & Restart Test', () => 
     assert.strictEqual(equipRes.success, true);
 
     // Verify in-memory state of initial service instance
-    const currentSkin1 = invService1.getEquippedSkin(playerId, 'vanguard_rifle');
+    const currentSkin1 = await invService1.getEquippedSkin(playerId, 'vanguard_rifle');
     assert.strictEqual(currentSkin1, 'skin_ar4_vulcan');
 
     // 4. Verify PostgreSQL database row directly
@@ -56,7 +56,7 @@ describe('ALPHA.62 — Equip Skin PostgreSQL Persistence & Restart Test', () => 
     await invService2.initPlayer(playerId);
 
     // 6. Verify that equipped skin remains 'skin_ar4_vulcan' after restart!
-    const currentSkinAfterRestart = invService2.getEquippedSkin(playerId, 'vanguard_rifle');
+    const currentSkinAfterRestart = await invService2.getEquippedSkin(playerId, 'vanguard_rifle');
     assert.strictEqual(currentSkinAfterRestart, 'skin_ar4_vulcan');
   });
 
@@ -119,7 +119,7 @@ describe('ALPHA.62 — Equip Skin PostgreSQL Persistence & Restart Test', () => 
     assert.strictEqual(equippedRifleSkinsInDb.length, 1); // Strictly 1 skin equipped in DB!
 
     // 5. Verify in-memory state matches DB state
-    const currentEquippedSkin = invService.getEquippedSkin(playerId, 'vanguard_rifle');
+    const currentEquippedSkin = await invService.getEquippedSkin(playerId, 'vanguard_rifle');
     assert.strictEqual(currentEquippedSkin, equippedRifleSkinsInDb[0].skinId);
   });
 });

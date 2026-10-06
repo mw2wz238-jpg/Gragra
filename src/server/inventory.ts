@@ -179,46 +179,26 @@ export class VanguardInventoryService {
     idempotencyKey?: string
   ): Promise<{ success: boolean; balanceAfter: number; idempotent?: boolean; reason?: string }> {
     await this.initPlayer(playerId);
-
     const key = idempotencyKey || `tx_${playerId}_${Date.now()}_${Math.random()}`;
-    if (this.processedTransactions.has(key)) {
-      return {
-        success: true,
-        idempotent: true,
-        balanceAfter: await this.getWallet(playerId),
+    
+    const dbRes = await vanguardRepository.modifyWallet(playerId, amount, type, source, key);
+    if (dbRes.success) {
+      this.playerWallets.set(playerId, dbRes.balanceAfter);
+      const entry: WalletLedgerEntry = {
+        transactionId: dbRes.transactionId || `tx_${Date.now()}`,
+        playerId,
+        type,
+        amount,
+        source,
+        timestamp: Date.now(),
+        idempotencyKey: key,
+        balanceAfter: dbRes.balanceAfter,
       };
+      this.ledger.push(entry);
+      this.processedTransactions.set(key, entry);
     }
 
-    const current = await this.getWallet(playerId);
-    if (type === 'DEBIT' && current < amount) {
-      return {
-        success: false,
-        balanceAfter: current,
-        reason: 'INSUFFICIENT_CREDITS',
-      };
-    }
-
-    const newBalance = type === 'CREDIT' ? current + amount : current - amount;
-    this.playerWallets.set(playerId, newBalance);
-
-    const entry: WalletLedgerEntry = {
-      transactionId: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      playerId,
-      type,
-      amount,
-      source,
-      timestamp: Date.now(),
-      idempotencyKey: key,
-      balanceAfter: newBalance,
-    };
-
-    this.ledger.push(entry);
-    this.processedTransactions.set(key, entry);
-
-    return {
-      success: true,
-      balanceAfter: newBalance,
-    };
+    return dbRes;
   }
 
   /**

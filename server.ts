@@ -214,7 +214,7 @@ app.post('/api/match/:matchId/settle', async (req: any, res) => {
 
   // Synchronize in-memory inventory service view if credits were settled
   if (settlement.success && settlement.walletBalanceAfter !== undefined) {
-    vanguardInventoryService.initPlayer(playerId, settlement.walletBalanceAfter);
+    await vanguardInventoryService.initPlayer(playerId, settlement.walletBalanceAfter);
   }
 
   res.json(settlement);
@@ -233,7 +233,7 @@ app.post('/api/inventory/equip', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { instanceId } = req.body;
   const result = await vanguardInventoryService.equipSkin(playerId, instanceId);
-  const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
+  const equippedSkins = await vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ ...result, equippedSkins });
 });
 

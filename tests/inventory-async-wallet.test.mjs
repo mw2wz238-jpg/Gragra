@@ -35,4 +35,23 @@ describe('ALPHA.67 — getWallet() Async Restart Safety', () => {
     
     assert.equal(balance, 4200, 'getWallet must await initPlayer and return the authoritative DB balance');
   });
+
+  it('should persist modifyWallet changes to PostgreSQL and survive service restart', async () => {
+    if (!isDatabaseAvailable) return;
+    await runMigrations();
+
+    const playerId = `modify_wallet_user_${Date.now()}`;
+    const service1 = new VanguardInventoryService();
+    await service1.initPlayer(playerId, 1000);
+
+    const modRes = await service1.modifyWallet(playerId, 500, 'CREDIT', 'MATCH_REWARD', `mod_key_${playerId}`);
+    assert.equal(modRes.success, true);
+    assert.equal(modRes.balanceAfter, 1500);
+
+    // Simulate service restart
+    const service2 = new VanguardInventoryService();
+    const reloadedBalance = await service2.getWallet(playerId);
+    assert.equal(reloadedBalance, 1500, 'Modified wallet balance must be persisted to DB and loaded on restart');
+  });
 });
+
