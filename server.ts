@@ -90,8 +90,7 @@ app.get('/api/map/vanguard_parking', (_req, res) => {
   res.json(VANGUARD_PARKING_MAP);
 });
 
-// Secure helper to resolve authenticated session identity
-function getPlayerIdFromSession(req: any): string {
+function getPlayerIdFromSession(req: any): string | null {
   const token = req.cookies?.session_token;
   if (token) {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -100,8 +99,7 @@ function getPlayerIdFromSession(req: any): string {
       return session.playerId;
     }
   }
-  // Graceful compatibility fallback for legacy automated tests
-  return req.body?.playerId || req.query?.playerId || 'player_vanguard_01';
+  return null;
 }
 
 // Session Authentication & Token Handlers
@@ -148,12 +146,14 @@ app.post('/api/auth/logout', (req: any, res) => {
 
 app.get('/api/profile', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const profile = await settlementService.getOrCreateProfile(playerId);
   res.json(profile);
 });
 
 app.post('/api/profile/update', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { username, equippedWeaponId } = req.body;
   const updated = await settlementService.updateProfileSettings(playerId, {
     username,
@@ -164,12 +164,14 @@ app.post('/api/profile/update', async (req: any, res) => {
 
 app.get('/api/match-history', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const history = await settlementService.getMatchHistory(playerId);
   res.json(history);
 });
 
 app.post('/api/matchmaking/queue', (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { username, mode, rating, region, preferredMapId } = req.body;
   const ticket = matchmakingEngine.enqueue(
     playerId,
@@ -185,12 +187,14 @@ app.post('/api/matchmaking/queue', (req: any, res) => {
 
 app.get('/api/matchmaking/status', (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const status = matchmakingEngine.getQueueStatus(playerId);
   res.json(status);
 });
 
 app.post('/api/matchmaking/cancel', (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const success = matchmakingEngine.dequeue(playerId);
   res.json({ success });
 });
@@ -198,6 +202,7 @@ app.post('/api/matchmaking/cancel', (req: any, res) => {
 app.post('/api/match/:matchId/settle', async (req: any, res) => {
   const { matchId } = req.params;
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { idempotencyKey } = req.body;
 
   const sim = activeSimulations.get(matchId);
@@ -223,6 +228,7 @@ app.post('/api/match/:matchId/settle', async (req: any, res) => {
 // Authoritative Inventory, Shop & Crates API (Sections 19, 21, 22, 23)
 app.get('/api/inventory', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const inventory = await vanguardInventoryService.getInventory(playerId);
   const wallet = await vanguardRepository.getWallet(playerId);
   const equippedSkins = await vanguardInventoryService.getEquippedSkinsMap(playerId);
@@ -231,6 +237,7 @@ app.get('/api/inventory', async (req: any, res) => {
 
 app.post('/api/inventory/equip', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { instanceId } = req.body;
   const result = await vanguardInventoryService.equipSkin(playerId, instanceId);
   const equippedSkins = await vanguardInventoryService.getEquippedSkinsMap(playerId);
@@ -239,6 +246,7 @@ app.post('/api/inventory/equip', async (req: any, res) => {
 
 app.post('/api/shop/purchase-skin', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { skinId, idempotencyKey } = req.body;
   const result = await vanguardInventoryService.purchaseShopSkin(playerId, skinId, idempotencyKey);
   res.json(result);
@@ -246,6 +254,7 @@ app.post('/api/shop/purchase-skin', async (req: any, res) => {
 
 app.post('/api/shop/purchase-crate', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { crateId, idempotencyKey } = req.body;
   const result = await vanguardInventoryService.purchaseCrate(playerId, crateId, idempotencyKey);
   res.json(result);
@@ -253,6 +262,7 @@ app.post('/api/shop/purchase-crate', async (req: any, res) => {
 
 app.post('/api/crates/open', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
+  if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
   const { crateInstanceId, idempotencyKey } = req.body;
   const result = await vanguardInventoryService.openCrate(playerId, crateInstanceId, idempotencyKey);
   res.json(result);

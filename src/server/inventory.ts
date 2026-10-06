@@ -153,7 +153,8 @@ export class VanguardInventoryService {
   public async getEquippedSkin(playerId: string, weaponId: string): Promise<string> {
     await this.initPlayer(playerId);
     const eq = this.playerEquippedSkins.get(playerId);
-    return eq?.get(weaponId) || `skin_${weaponId.replace('vanguard_', '')}_default`;
+    const cleanWeaponId = weaponId || 'vanguard_rifle';
+    return eq?.get(cleanWeaponId) || `skin_${cleanWeaponId.replace('vanguard_', '')}_default`;
   }
 
   public async getEquippedSkinsMap(playerId: string): Promise<Record<string, string>> {

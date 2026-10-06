@@ -1109,7 +1109,7 @@ export class VanguardRepository {
       headshots: row.headshots,
       mvps: row.mvps,
       playTimeMinutes: row.play_time_minutes,
-      equippedWeaponId: row.equipped_weapon_id,
+      equippedWeaponId: row.equipped_weapon_id || 'vanguard_rifle',
       walletCoins: row.wallet_coins !== undefined ? parseInt(row.wallet_coins, 10) : 0,
     };
   }

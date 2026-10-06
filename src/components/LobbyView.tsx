@@ -186,8 +186,9 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
     }
   };
 
-  const currentWeapon = VANGUARD_WEAPONS[profile.equippedWeaponId] || VANGUARD_WEAPONS.vanguard_rifle;
-  const currentSkinId = equippedSkins[profile.equippedWeaponId] || `skin_${profile.equippedWeaponId.replace('vanguard_', '')}_default`;
+  const currentWeaponId = profile.equippedWeaponId || 'vanguard_rifle';
+  const currentWeapon = VANGUARD_WEAPONS[currentWeaponId] || VANGUARD_WEAPONS.vanguard_rifle;
+  const currentSkinId = equippedSkins[currentWeaponId] || `skin_${currentWeaponId.replace('vanguard_', '')}_default`;
   const kdRatio = profile.deaths > 0 ? (profile.kills / profile.deaths).toFixed(2) : profile.kills.toFixed(2);
   const winRate = profile.matches > 0 ? Math.round((profile.wins / profile.matches) * 100) : 0;
   const xpInCurrentLevel = profile.xp % 1000;
