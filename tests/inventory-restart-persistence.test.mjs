@@ -25,13 +25,11 @@ describe('ALPHA.64 — Inventory Restart Persistence & Replay Protection', () =>
     const keyCrate = `idem_crate_${playerId}`;
     const keyOpen = `idem_open_${playerId}`;
 
-    // ==========================================
     // PHASE 1: Initialize Player Profile & Wallet
     // ==========================================
     const server1 = new VanguardInventoryService();
     await server1.initPlayer(playerId, 10000); // Give plenty of credits
-    // Ensure 10000 persistent credits
-    await vanguardRepository.modifyWallet(playerId, 10000, 'CREDIT', 'DAILY_BONUS', `fund_${playerId}`);
+    // Ensure 10000 persistent credits (initPlayer does this now)
 
     const startingWallet = await vanguardRepository.getWallet(playerId);
     assert.equal(startingWallet, 10000);

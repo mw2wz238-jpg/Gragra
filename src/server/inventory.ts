@@ -39,21 +39,10 @@ export class VanguardInventoryService {
     });
   }
 
-  public async initPlayer(playerId: string, initialCredits = 1500): Promise<InventoryItem[]> {
-    if (!this.playerWallets.has(playerId)) {
-      this.playerWallets.set(playerId, initialCredits);
-    }
-
-    if (!this.playerEquippedSkins.has(playerId)) {
-      const eq = new Map<string, string>();
-      eq.set('vanguard_rifle', 'skin_ar4_default');
-      eq.set('vanguard_smg', 'skin_vector_default');
-      eq.set('vanguard_shotgun', 'skin_breaker_default');
-      eq.set('vanguard_pistol', 'skin_sentinel_default');
-      this.playerEquippedSkins.set(playerId, eq);
-    }
-
+  public async initPlayer(playerId: string, initialCredits = 0): Promise<InventoryItem[]> {
     let inv = this.playerInventories.get(playerId);
+    let newlySeeded = false;
+
     if (!inv) {
       inv = new Map<string, InventoryItem>();
       this.playerInventories.set(playerId, inv);
@@ -74,7 +63,30 @@ export class VanguardInventoryService {
       } else {
         // 2. Fresh player with no items in DB: seed starter pack and persist to DB
         await this.seedStarterPack(playerId, inv);
+        newlySeeded = true;
       }
+    }
+
+    if (!this.playerWallets.has(playerId)) {
+      // FIX: Load authoritative wallet balance from PostgreSQL for session recovery/restart
+      const dbBalance = await vanguardRepository.getWallet(playerId);
+      
+      // If brand new player (just seeded) and balance is 0, give initial gift
+      if (newlySeeded && dbBalance === 0 && initialCredits > 0) {
+        await vanguardRepository.modifyWallet(playerId, initialCredits, 'CREDIT', 'DAILY_BONUS', `init_welcome_${playerId}_${Date.now()}`);
+        this.playerWallets.set(playerId, initialCredits);
+      } else {
+        this.playerWallets.set(playerId, dbBalance);
+      }
+    }
+
+    if (!this.playerEquippedSkins.has(playerId)) {
+      const eq = new Map<string, string>();
+      eq.set('vanguard_rifle', 'skin_ar4_default');
+      eq.set('vanguard_smg', 'skin_vector_default');
+      eq.set('vanguard_shotgun', 'skin_breaker_default');
+      eq.set('vanguard_pistol', 'skin_sentinel_default');
+      this.playerEquippedSkins.set(playerId, eq);
     }
 
     return Array.from(inv.values());

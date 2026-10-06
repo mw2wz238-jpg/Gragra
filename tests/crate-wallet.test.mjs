@@ -19,7 +19,6 @@ describe('ALPHA.58 — Crates Persistent Wallet Debit & Idempotency', () => {
 
     // Give 400 credits (Ops crate costs 500)
     await invService.initPlayer(playerId, 400);
-    await vanguardRepository.modifyWallet(playerId, 400, 'CREDIT', 'DAILY_BONUS', `init_tx_${playerId}`);
 
     const cratePrice = VANGUARD_CRATES.crate_vanguard_ops_01.priceCredits; // 500
 
@@ -58,7 +57,6 @@ describe('ALPHA.58 — Crates Persistent Wallet Debit & Idempotency', () => {
 
     // Initialize player with 1000 credits
     await invService.initPlayer(playerId, 1000);
-    await vanguardRepository.modifyWallet(playerId, 1000, 'CREDIT', 'DAILY_BONUS', `init_tx_2_${playerId}`);
 
     // Buy crate
     const crateBuy = await invService.purchaseCrate(playerId, 'crate_vanguard_ops_01', `buy_crate_2_${playerId}`);
