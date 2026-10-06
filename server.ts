@@ -22,8 +22,8 @@ import { vanguardRepository } from './src/db/repository.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-const server = http.createServer(app);
+export const app = express();
+export const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -223,7 +223,7 @@ app.post('/api/match/:matchId/settle', async (req: any, res) => {
 // Authoritative Inventory, Shop & Crates API (Sections 19, 21, 22, 23)
 app.get('/api/inventory', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
-  const inventory = vanguardInventoryService.getInventory(playerId);
+  const inventory = await vanguardInventoryService.getInventory(playerId);
   const wallet = await vanguardRepository.getWallet(playerId);
   const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ success: true, inventory, wallet, equippedSkins });
