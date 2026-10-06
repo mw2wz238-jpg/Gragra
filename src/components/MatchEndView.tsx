@@ -163,6 +163,12 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
             <span className="text-slate-400">Account Experience Gained:</span>
             <span className="text-emerald-400 font-bold tabular-nums">+{settlement?.xpEarned || 420} XP</span>
           </div>
+
+          {/* Credits Gained */}
+          <div className="flex items-center justify-between pt-2 text-xs font-mono">
+            <span className="text-slate-400">Combat Credits Awarded:</span>
+            <span className="text-amber-400 font-bold tabular-nums">+{settlement?.coinsEarned || (isVictory ? 350 : 150)} CR</span>
+          </div>
         </div>
 
         {/* Return to Lobby Button */}

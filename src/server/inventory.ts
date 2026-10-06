@@ -18,6 +18,7 @@ import {
   VANGUARD_SKINS,
   VANGUARD_WEAPONS,
 } from '../shared/types.ts';
+import { vanguardRepository } from '../db/repository.ts';
 
 export class VanguardInventoryService {
   // Player ID -> List of Inventory Items
@@ -33,60 +34,12 @@ export class VanguardInventoryService {
 
   constructor() {
     // Initialize default player 'player_vanguard_01'
-    this.initPlayer('player_vanguard_01', 3500);
+    this.initPlayer('player_vanguard_01', 3500).catch(err => {
+      console.warn('[InventoryService] Background init warning:', err?.message || err);
+    });
   }
 
-  public initPlayer(playerId: string, initialCredits = 1500) {
-    if (!this.playerInventories.has(playerId)) {
-      const inv = new Map<string, InventoryItem>();
-      this.playerInventories.set(playerId, inv);
-
-      // Give default skins
-      const defaultSkins = [
-        'skin_ar4_default',
-        'skin_vector_default',
-        'skin_breaker_default',
-        'skin_sentinel_default',
-      ];
-
-      for (const skinId of defaultSkins) {
-        const def = VANGUARD_SKINS[skinId];
-        if (def) {
-          const item: InventoryItem = {
-            instanceId: `inst_default_${playerId}_${skinId}`,
-            itemType: 'SKIN',
-            skinId,
-            weaponId: def.weaponId,
-            equipped: true,
-            acquiredAt: Date.now(),
-            source: 'DEFAULT',
-          };
-          inv.set(item.instanceId, item);
-        }
-      }
-
-      // Starter crates as gift
-      const starterCrate1: InventoryItem = {
-        instanceId: `inst_crate_${playerId}_ops1_${Date.now()}`,
-        itemType: 'CRATE',
-        crateId: 'crate_vanguard_ops_01',
-        equipped: false,
-        acquiredAt: Date.now(),
-        source: 'DEFAULT',
-      };
-      inv.set(starterCrate1.instanceId, starterCrate1);
-
-      const starterCrate2: InventoryItem = {
-        instanceId: `inst_crate_${playerId}_cyber_${Date.now()}`,
-        itemType: 'CRATE',
-        crateId: 'crate_cyber_covert',
-        equipped: false,
-        acquiredAt: Date.now(),
-        source: 'DEFAULT',
-      };
-      inv.set(starterCrate2.instanceId, starterCrate2);
-    }
-
+  public async initPlayer(playerId: string, initialCredits = 1500): Promise<InventoryItem[]> {
     if (!this.playerWallets.has(playerId)) {
       this.playerWallets.set(playerId, initialCredits);
     }
@@ -99,17 +52,92 @@ export class VanguardInventoryService {
       eq.set('vanguard_pistol', 'skin_sentinel_default');
       this.playerEquippedSkins.set(playerId, eq);
     }
+
+    let inv = this.playerInventories.get(playerId);
+    if (!inv) {
+      inv = new Map<string, InventoryItem>();
+      this.playerInventories.set(playerId, inv);
+
+      // 1. Read existing inventory items from PostgreSQL via VanguardRepository for new session
+      const dbItems = await vanguardRepository.getInventory(playerId);
+
+      if (dbItems && dbItems.length > 0) {
+        // Player already has saved items in PostgreSQL: populate in-memory state without regenerating starter pack
+        const eq = this.playerEquippedSkins.get(playerId) || new Map<string, string>();
+        for (const item of dbItems) {
+          inv.set(item.instanceId, item);
+          if (item.equipped && item.weaponId && item.skinId) {
+            eq.set(item.weaponId, item.skinId);
+          }
+        }
+        this.playerEquippedSkins.set(playerId, eq);
+      } else {
+        // 2. Fresh player with no items in DB: seed starter pack and persist to DB
+        await this.seedStarterPack(playerId, inv);
+      }
+    }
+
+    return Array.from(inv.values());
+  }
+
+  private async seedStarterPack(playerId: string, inv: Map<string, InventoryItem>): Promise<void> {
+    const defaultSkins = [
+      'skin_ar4_default',
+      'skin_vector_default',
+      'skin_breaker_default',
+      'skin_sentinel_default',
+    ];
+
+    for (const skinId of defaultSkins) {
+      const def = VANGUARD_SKINS[skinId];
+      if (def) {
+        const item: InventoryItem = {
+          instanceId: `inst_default_${playerId}_${skinId}`,
+          itemType: 'SKIN',
+          skinId,
+          weaponId: def.weaponId,
+          equipped: true,
+          acquiredAt: Date.now(),
+          source: 'DEFAULT',
+        };
+        inv.set(item.instanceId, item);
+        await vanguardRepository.addInventoryItem(item, playerId);
+      }
+    }
+
+    // Starter crates as gift
+    const starterCrate1: InventoryItem = {
+      instanceId: `inst_crate_${playerId}_ops1_${Date.now()}`,
+      itemType: 'CRATE',
+      crateId: 'crate_vanguard_ops_01',
+      equipped: false,
+      acquiredAt: Date.now(),
+      source: 'DEFAULT',
+    };
+    inv.set(starterCrate1.instanceId, starterCrate1);
+    await vanguardRepository.addInventoryItem(starterCrate1, playerId);
+
+    const starterCrate2: InventoryItem = {
+      instanceId: `inst_crate_${playerId}_cyber_${Date.now()}`,
+      itemType: 'CRATE',
+      crateId: 'crate_cyber_covert',
+      equipped: false,
+      acquiredAt: Date.now(),
+      source: 'DEFAULT',
+    };
+    inv.set(starterCrate2.instanceId, starterCrate2);
+    await vanguardRepository.addInventoryItem(starterCrate2, playerId);
   }
 
   public getWallet(playerId: string): number {
-    this.initPlayer(playerId);
+    if (!this.playerInventories.has(playerId)) {
+      this.initPlayer(playerId).catch(() => {});
+    }
     return this.playerWallets.get(playerId) ?? 0;
   }
 
-  public getInventory(playerId: string): InventoryItem[] {
-    this.initPlayer(playerId);
-    const inv = this.playerInventories.get(playerId);
-    return inv ? Array.from(inv.values()) : [];
+  public async getInventory(playerId: string): Promise<InventoryItem[]> {
+    return await this.initPlayer(playerId);
   }
 
   public getEquippedSkin(playerId: string, weaponId: string): string {
@@ -185,9 +213,10 @@ export class VanguardInventoryService {
 
   /**
    * Equip weapon skin (Server-Authoritative)
+   * Persists equipped status to PostgreSQL via VanguardRepository before updating RAM
    */
-  public equipSkin(playerId: string, instanceId: string): { success: boolean; reason?: string } {
-    this.initPlayer(playerId);
+  public async equipSkin(playerId: string, instanceId: string): Promise<{ success: boolean; reason?: string }> {
+    await this.initPlayer(playerId);
     const inv = this.playerInventories.get(playerId);
     if (!inv) return { success: false, reason: 'PLAYER_NOT_FOUND' };
 
@@ -203,16 +232,25 @@ export class VanguardInventoryService {
 
     const weaponId = skinDef.weaponId;
 
-    // Unequip any other skin for this weapon
+    // Persist equipped status to PostgreSQL first
+    const dbSuccess = await vanguardRepository.setEquipped(instanceId, playerId, true);
+    if (!dbSuccess) {
+      return { success: false, reason: 'EQUIP_FAILED' };
+    }
+
+    // Unequip any other skin for this weapon in RAM
     for (const otherItem of inv.values()) {
       if (otherItem.itemType === 'SKIN' && otherItem.weaponId === weaponId) {
         otherItem.equipped = false;
       }
     }
 
-    // Equip this item
+    // Equip this item in RAM
     item.equipped = true;
-    const eq = this.playerEquippedSkins.get(playerId)!;
+    const eq = this.playerEquippedSkins.get(playerId) || new Map<string, string>();
+    if (!this.playerEquippedSkins.has(playerId)) {
+      this.playerEquippedSkins.set(playerId, eq);
+    }
     eq.set(weaponId, item.skinId);
 
     return { success: true };
@@ -220,39 +258,34 @@ export class VanguardInventoryService {
 
   /**
    * Purchase skin directly from Shop with credits (Server-Authoritative)
+   * Uses single atomic PostgreSQL transaction: DEBIT wallet + INSERT inventory_items
    */
-  public purchaseShopSkin(
+  public async purchaseShopSkin(
     playerId: string,
     skinId: string,
     idempotencyKey?: string
-  ): { success: boolean; item?: InventoryItem; balanceAfter: number; reason?: string } {
-    this.initPlayer(playerId);
+  ): Promise<{ success: boolean; item?: InventoryItem; balanceAfter: number; idempotent?: boolean; transactionId?: string; reason?: string }> {
+    await this.initPlayer(playerId);
     const skinDef = VANGUARD_SKINS[skinId];
     if (!skinDef) {
-      return { success: false, balanceAfter: this.getWallet(playerId), reason: 'SKIN_NOT_FOUND' };
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      return { success: false, balanceAfter: currentBalance, reason: 'SKIN_NOT_FOUND' };
     }
 
     const key = idempotencyKey || `shop_buy_${playerId}_${skinId}_${Date.now()}`;
     if (this.processedTransactions.has(key)) {
       const cached = this.processedTransactions.get(key);
+      const currentBalance = await vanguardRepository.getWallet(playerId);
       return {
         success: true,
+        idempotent: true,
         item: cached.item,
-        balanceAfter: this.getWallet(playerId),
+        balanceAfter: currentBalance,
+        transactionId: cached.transactionId,
       };
     }
 
-    // Deduct price
-    const walletRes = this.modifyWallet(playerId, skinDef.priceCredits, 'DEBIT', 'SHOP_PURCHASE', key);
-    if (!walletRes.success) {
-      return {
-        success: false,
-        balanceAfter: walletRes.balanceAfter,
-        reason: walletRes.reason,
-      };
-    }
-
-    // Add item to inventory
+    // Prepare InventoryItem object
     const instanceId = `inst_skin_${playerId}_${skinId}_${Date.now()}`;
     const item: InventoryItem = {
       instanceId,
@@ -264,49 +297,99 @@ export class VanguardInventoryService {
       source: 'SHOP_PURCHASE',
     };
 
-    const inv = this.playerInventories.get(playerId)!;
+    // Execute atomic DEBIT wallet + INSERT inventory_items in a single PostgreSQL transaction
+    const atomicRes = await vanguardRepository.purchaseShopSkinAtomic(
+      playerId,
+      item,
+      skinDef.priceCredits,
+      key
+    );
+
+    if (!atomicRes.success) {
+      return {
+        success: false,
+        balanceAfter: atomicRes.balanceAfter,
+        idempotent: atomicRes.idempotent,
+        reason: atomicRes.reason,
+      };
+    }
+
+    // Synchronize local memory cache
+    this.playerWallets.set(playerId, atomicRes.balanceAfter);
+    const inv = this.playerInventories.get(playerId) || new Map();
+    if (!this.playerInventories.has(playerId)) {
+      this.playerInventories.set(playerId, inv);
+    }
     inv.set(instanceId, item);
 
-    this.processedTransactions.set(key, { item, balanceAfter: walletRes.balanceAfter });
+    this.processedTransactions.set(key, { item, balanceAfter: atomicRes.balanceAfter, transactionId: atomicRes.transactionId });
 
     return {
       success: true,
+      idempotent: atomicRes.idempotent,
       item,
-      balanceAfter: walletRes.balanceAfter,
+      balanceAfter: atomicRes.balanceAfter,
+      transactionId: atomicRes.transactionId,
     };
   }
 
   /**
    * Purchase crate from Shop with credits
    */
-  public purchaseCrate(
+  public async purchaseCrate(
     playerId: string,
     crateId: string,
     idempotencyKey?: string
-  ): { success: boolean; crateItem?: InventoryItem; balanceAfter: number; reason?: string } {
-    this.initPlayer(playerId);
+  ): Promise<{ success: boolean; crateItem?: InventoryItem; balanceAfter: number; idempotent?: boolean; transactionId?: string; reason?: string }> {
+    await this.initPlayer(playerId);
     const crateDef = VANGUARD_CRATES[crateId];
     if (!crateDef) {
-      return { success: false, balanceAfter: this.getWallet(playerId), reason: 'CRATE_NOT_FOUND' };
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      return { success: false, balanceAfter: currentBalance, reason: 'CRATE_NOT_FOUND' };
     }
 
     const key = idempotencyKey || `crate_buy_${playerId}_${crateId}_${Date.now()}`;
     if (this.processedTransactions.has(key)) {
       const cached = this.processedTransactions.get(key);
+      const currentBalance = await vanguardRepository.getWallet(playerId);
       return {
         success: true,
+        idempotent: true,
         crateItem: cached.crateItem,
-        balanceAfter: this.getWallet(playerId),
+        balanceAfter: currentBalance,
+        transactionId: cached.transactionId,
       };
     }
 
-    // Deduct price
-    const walletRes = this.modifyWallet(playerId, crateDef.priceCredits, 'DEBIT', 'SHOP_PURCHASE', key);
+    // Deduct price atomically via persistent VanguardRepository
+    const walletRes = await vanguardRepository.modifyWallet(
+      playerId,
+      crateDef.priceCredits,
+      'DEBIT',
+      'SHOP_PURCHASE',
+      key
+    );
+
     if (!walletRes.success) {
       return {
         success: false,
         balanceAfter: walletRes.balanceAfter,
+        idempotent: walletRes.idempotent,
         reason: walletRes.reason,
+      };
+    }
+
+    // Synchronize local memory cache
+    this.playerWallets.set(playerId, walletRes.balanceAfter);
+
+    if (walletRes.idempotent && this.processedTransactions.has(key)) {
+      const cached = this.processedTransactions.get(key);
+      return {
+        success: true,
+        idempotent: true,
+        crateItem: cached.crateItem,
+        balanceAfter: walletRes.balanceAfter,
+        transactionId: walletRes.transactionId,
       };
     }
 
@@ -321,34 +404,56 @@ export class VanguardInventoryService {
       source: 'SHOP_PURCHASE',
     };
 
-    const inv = this.playerInventories.get(playerId)!;
+    const inv = this.playerInventories.get(playerId) || new Map();
+    if (!this.playerInventories.has(playerId)) {
+      this.playerInventories.set(playerId, inv);
+    }
     inv.set(instanceId, crateItem);
 
-    this.processedTransactions.set(key, { crateItem, balanceAfter: walletRes.balanceAfter });
+    // Persist purchased crate to PostgreSQL inventory_items table
+    await vanguardRepository.addInventoryItem(crateItem, playerId);
+
+    this.processedTransactions.set(key, { crateItem, balanceAfter: walletRes.balanceAfter, transactionId: walletRes.transactionId });
 
     return {
       success: true,
+      idempotent: walletRes.idempotent,
       crateItem,
       balanceAfter: walletRes.balanceAfter,
+      transactionId: walletRes.transactionId,
     };
   }
 
   /**
-   * Open Crate with Authoritative Server-side Weighted RNG (Section 22)
+   * Open Crate with Authoritative Server-side Weighted RNG (Section 22) & Persistent Wallet Debit
    */
-  public openCrate(
+  public async openCrate(
     playerId: string,
     crateInstanceId: string,
     idempotencyKey?: string
-  ): {
+  ): Promise<{
     success: boolean;
     droppedSkin?: SkinDef;
     item?: InventoryItem;
+    balanceAfter?: number;
+    idempotent?: boolean;
+    transactionId?: string;
     reason?: string;
-  } {
-    this.initPlayer(playerId);
+  }> {
+    await this.initPlayer(playerId);
     const inv = this.playerInventories.get(playerId);
     if (!inv) return { success: false, reason: 'PLAYER_NOT_FOUND' };
+
+    const key = idempotencyKey || `open_${playerId}_${crateInstanceId}`;
+    if (this.processedTransactions.has(key)) {
+      const cached = this.processedTransactions.get(key);
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      return {
+        ...cached,
+        idempotent: true,
+        balanceAfter: currentBalance,
+      };
+    }
 
     const crateItem = inv.get(crateInstanceId);
     if (!crateItem || crateItem.itemType !== 'CRATE' || !crateItem.crateId) {
@@ -360,15 +465,7 @@ export class VanguardInventoryService {
       return { success: false, reason: 'INVALID_CRATE_DEF' };
     }
 
-    const key = idempotencyKey || `open_${playerId}_${crateInstanceId}`;
-    if (this.processedTransactions.has(key)) {
-      return this.processedTransactions.get(key);
-    }
-
-    // 1. Consume crate instance from inventory atomically
-    inv.delete(crateInstanceId);
-
-    // 2. Roll RNG based on server-side weighted probability table
+    // 1. Roll RNG based on server-side weighted probability table BEFORE transaction
     const totalWeight = crateDef.dropTable.reduce((acc, entry) => acc + entry.weight, 0);
     const randomRoll = Math.random() * totalWeight;
 
@@ -388,7 +485,7 @@ export class VanguardInventoryService {
       return { success: false, reason: 'ROLL_ERROR' };
     }
 
-    // 3. Add won skin to inventory
+    // 2. Construct won reward item
     const skinInstanceId = `inst_skin_${playerId}_${skinDef.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const wonItem: InventoryItem = {
       instanceId: skinInstanceId,
@@ -400,12 +497,36 @@ export class VanguardInventoryService {
       source: 'CRATE_DROP',
     };
 
+    // 3. Execute atomic PostgreSQL transaction: DEBIT wallet + DELETE crate + INSERT reward item
+    const atomicRes = await vanguardRepository.openCrateAtomic(
+      playerId,
+      crateInstanceId,
+      wonItem,
+      crateDef.priceCredits,
+      key
+    );
+
+    if (!atomicRes.success) {
+      return {
+        success: false,
+        balanceAfter: atomicRes.balanceAfter,
+        idempotent: atomicRes.idempotent,
+        reason: atomicRes.reason,
+      };
+    }
+
+    // 4. Synchronize local RAM state AFTER successful PostgreSQL commit
+    inv.delete(crateInstanceId);
     inv.set(skinInstanceId, wonItem);
+    this.playerWallets.set(playerId, atomicRes.balanceAfter);
 
     const response = {
       success: true,
+      idempotent: atomicRes.idempotent,
       droppedSkin: skinDef,
       item: wonItem,
+      balanceAfter: atomicRes.balanceAfter,
+      transactionId: atomicRes.transactionId,
     };
 
     this.processedTransactions.set(key, response);

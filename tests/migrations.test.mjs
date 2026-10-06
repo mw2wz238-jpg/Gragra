@@ -1,14 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runMigrations } from '../src/db/migrate.ts';
-import { pool } from '../src/db/client.ts';
+import { pool, isDatabaseAvailable, closeDatabase } from '../src/db/client.ts';
 
 describe('PostgreSQL Migration Infrastructure (Alpha.53 - Etap 3)', () => {
   it('should run migrations and create expected tables', async () => {
-    // This test requires a live PostgreSQL instance defined by DATABASE_URL
-    const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl || dbUrl.includes('...') || dbUrl.includes('placeholder')) {
-      console.warn('Skipping migration test: DATABASE_URL not set or is placeholder');
+    if (!isDatabaseAvailable) {
+      console.warn('Skipping migration test: Database not available');
       return;
     }
 
@@ -19,7 +17,7 @@ describe('PostgreSQL Migration Infrastructure (Alpha.53 - Etap 3)', () => {
       // 2. Verify tables exist
       const client = await pool.connect();
       try {
-        const tables = ['schema_migrations', 'users', 'profiles', 'match_history'];
+        const tables = ['schema_migrations', 'users', 'profiles', 'match_history', 'wallets', 'wallet_ledger', 'inventory_items'];
         for (const table of tables) {
           const res = await client.query(
             "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)",
@@ -45,6 +43,6 @@ describe('PostgreSQL Migration Infrastructure (Alpha.53 - Etap 3)', () => {
 
   // Final cleanup: Close pool so the test process can exit
   it('cleanup', async () => {
-    await pool.end();
+    await closeDatabase();
   });
 });

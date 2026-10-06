@@ -19,13 +19,21 @@ describe('Vanguard Production Database Guard (Alpha.53)', () => {
       }
     `;
 
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.SQL_HOST;
+    delete cleanEnv.SQL_USER;
+    delete cleanEnv.SQL_PASSWORD;
+    delete cleanEnv.SQL_DB_NAME;
+    delete cleanEnv.SQL_ADMIN_USER;
+    delete cleanEnv.SQL_ADMIN_PASSWORD;
+
     const result = spawnSync('node', [
       '--input-type=module',
       '-e',
       script
     ], {
       cwd: path.resolve(__dirname, '..'),
-      env: { ...process.env, NODE_ENV: 'production', DATABASE_URL: 'placeholder...' }
+      env: { ...cleanEnv, NODE_ENV: 'production', DATABASE_URL: 'placeholder...' }
     });
 
     // We expect 1 because client.ts calls process.exit(1)
@@ -35,6 +43,7 @@ describe('Vanguard Production Database Guard (Alpha.53)', () => {
   it('should NOT exit in development mode if DATABASE_URL is invalid', () => {
     const script = `
       process.env.NODE_ENV = 'development';
+      delete process.env.SQL_HOST;
       process.env.DATABASE_URL = 'placeholder...';
       const { isDatabaseAvailable } = await import('./src/db/client.ts');
       if (isDatabaseAvailable === false) {
@@ -44,13 +53,21 @@ describe('Vanguard Production Database Guard (Alpha.53)', () => {
       }
     `;
 
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.SQL_HOST;
+    delete cleanEnv.SQL_USER;
+    delete cleanEnv.SQL_PASSWORD;
+    delete cleanEnv.SQL_DB_NAME;
+    delete cleanEnv.SQL_ADMIN_USER;
+    delete cleanEnv.SQL_ADMIN_PASSWORD;
+
     const result = spawnSync('node', [
       '--input-type=module',
       '-e',
       script
     ], {
       cwd: path.resolve(__dirname, '..'),
-      env: { ...process.env, NODE_ENV: 'development', DATABASE_URL: 'placeholder...' }
+      env: { ...cleanEnv, NODE_ENV: 'development', DATABASE_URL: 'placeholder...' }
     });
 
     assert.strictEqual(result.status, 0, 'Development mode should allow fallback');

@@ -17,6 +17,7 @@ import { SettlementService } from './src/server/settlement.ts';
 import { AUTHORITATIVE_MANIFEST } from './src/vcds/manifest.ts';
 import { testConnection, closeDatabase } from './src/db/client.ts';
 import { runMigrations } from './src/db/migrate.ts';
+import { vanguardRepository } from './src/db/repository.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -211,56 +212,49 @@ app.post('/api/match/:matchId/settle', async (req: any, res) => {
 
   const settlement = await settlementService.processMatchSettlement(authoritativeSettlement, idempotencyKey);
 
-  // Award match credits to player wallet on server
-  if (settlement.success) {
-    const earnedCredits = authoritativeSettlement.result === 'VICTORY' ? 350 : 150;
-    vanguardInventoryService.modifyWallet(
-      playerId,
-      earnedCredits,
-      'CREDIT',
-      'MATCH_REWARD',
-      `${matchId}_credits_${playerId}`
-    );
+  // Synchronize in-memory inventory service view if credits were settled
+  if (settlement.success && settlement.walletBalanceAfter !== undefined) {
+    vanguardInventoryService.initPlayer(playerId, settlement.walletBalanceAfter);
   }
 
   res.json(settlement);
 });
 
 // Authoritative Inventory, Shop & Crates API (Sections 19, 21, 22, 23)
-app.get('/api/inventory', (req: any, res) => {
+app.get('/api/inventory', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const inventory = vanguardInventoryService.getInventory(playerId);
-  const wallet = vanguardInventoryService.getWallet(playerId);
+  const wallet = await vanguardRepository.getWallet(playerId);
   const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ success: true, inventory, wallet, equippedSkins });
 });
 
-app.post('/api/inventory/equip', (req: any, res) => {
+app.post('/api/inventory/equip', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { instanceId } = req.body;
-  const result = vanguardInventoryService.equipSkin(playerId, instanceId);
+  const result = await vanguardInventoryService.equipSkin(playerId, instanceId);
   const equippedSkins = vanguardInventoryService.getEquippedSkinsMap(playerId);
   res.json({ ...result, equippedSkins });
 });
 
-app.post('/api/shop/purchase-skin', (req: any, res) => {
+app.post('/api/shop/purchase-skin', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { skinId, idempotencyKey } = req.body;
-  const result = vanguardInventoryService.purchaseShopSkin(playerId, skinId, idempotencyKey);
+  const result = await vanguardInventoryService.purchaseShopSkin(playerId, skinId, idempotencyKey);
   res.json(result);
 });
 
-app.post('/api/shop/purchase-crate', (req: any, res) => {
+app.post('/api/shop/purchase-crate', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { crateId, idempotencyKey } = req.body;
-  const result = vanguardInventoryService.purchaseCrate(playerId, crateId, idempotencyKey);
+  const result = await vanguardInventoryService.purchaseCrate(playerId, crateId, idempotencyKey);
   res.json(result);
 });
 
-app.post('/api/crates/open', (req: any, res) => {
+app.post('/api/crates/open', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   const { crateInstanceId, idempotencyKey } = req.body;
-  const result = vanguardInventoryService.openCrate(playerId, crateInstanceId, idempotencyKey);
+  const result = await vanguardInventoryService.openCrate(playerId, crateInstanceId, idempotencyKey);
   res.json(result);
 });
 

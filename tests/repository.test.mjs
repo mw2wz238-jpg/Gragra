@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { pool } from '../src/db/client.ts';
+import { pool, isDatabaseAvailable, closeDatabase } from '../src/db/client.ts';
 import { vanguardRepository } from '../src/db/repository.ts';
 import { runMigrations } from '../src/db/migrate.ts';
 
@@ -9,16 +9,15 @@ describe('Vanguard PostgreSQL Repository (Alpha.53 - Etap 4)', () => {
   const testUsername = 'TestSoldier';
 
   before(async () => {
-    const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl || dbUrl.includes('...') || dbUrl.includes('placeholder')) {
-      console.warn('Skipping repo tests: DATABASE_URL not set');
+    if (!isDatabaseAvailable) {
+      console.warn('Skipping repo tests: Database not available');
       return;
     }
     await runMigrations();
   });
 
   it('should create and retrieve a player profile', async () => {
-    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('...')) return;
+    if (!isDatabaseAvailable) return;
 
     const profile = await vanguardRepository.getOrCreateProfile(testPlayerId, testUsername);
     
@@ -29,7 +28,7 @@ describe('Vanguard PostgreSQL Repository (Alpha.53 - Etap 4)', () => {
   });
 
   it('should update player profile statistics', async () => {
-    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('...')) return;
+    if (!isDatabaseAvailable) return;
 
     await vanguardRepository.updateProfile(testPlayerId, {
       level: 5,
@@ -46,7 +45,7 @@ describe('Vanguard PostgreSQL Repository (Alpha.53 - Etap 4)', () => {
   });
 
   it('should save and retrieve match history', async () => {
-    if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('...')) return;
+    if (!isDatabaseAvailable) return;
 
     const matchData = {
       id: 'match_test_001',
@@ -75,7 +74,30 @@ describe('Vanguard PostgreSQL Repository (Alpha.53 - Etap 4)', () => {
     assert.strictEqual(entry.score, '13:8');
   });
 
+  it('should reflect persistent wallet balance in player profile walletCoins', async () => {
+    if (!isDatabaseAvailable) return;
+
+    // Initially wallet should be 0
+    const profileInitial = await vanguardRepository.getOrCreateProfile(testPlayerId, testUsername);
+    assert.strictEqual(profileInitial.walletCoins, 0);
+
+    // Modify wallet balance via authoritative modifyWallet
+    const creditRes = await vanguardRepository.modifyWallet(
+      testPlayerId,
+      750,
+      'CREDIT',
+      'DAILY_BONUS',
+      `repo_test_credit_${Date.now()}`
+    );
+    assert.strictEqual(creditRes.success, true);
+    assert.strictEqual(creditRes.balanceAfter, 750);
+
+    // Profile retrieval must now reflect persistent balance from wallets table
+    const profileUpdated = await vanguardRepository.getOrCreateProfile(testPlayerId, testUsername);
+    assert.strictEqual(profileUpdated.walletCoins, 750, 'PlayerProfile.walletCoins must reflect PostgreSQL wallets balance');
+  });
+
   after(async () => {
-    await pool.end();
+    await closeDatabase();
   });
 });

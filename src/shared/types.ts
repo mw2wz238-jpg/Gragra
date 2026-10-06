@@ -358,6 +358,8 @@ export interface MatchEndSettlementResponse {
   ratingAfter: number;
   ratingChange: number;
   xpEarned: number;
+  coinsEarned?: number;
+  walletBalanceAfter?: number;
   newLevel: number;
   newRank: string;
   updatedStats: {
