@@ -105,4 +105,18 @@ describe('ALPHA.58 — Crates Persistent Wallet Debit & Idempotency', () => {
     assert.equal(crateOpenEntry.type, 'DEBIT');
     assert.equal(crateOpenEntry.amount, 500);
   });
+
+  it('should return identical full crate item data on replay', async () => {
+    const invService = new VanguardInventoryService();
+    const playerId = `test_user_replay_${Date.now()}`;
+    await invService.initPlayer(playerId, 1000);
+
+    const key = `buy_crate_replay_${playerId}`;
+    const res1 = await invService.purchaseCrate(playerId, 'crate_vanguard_ops_01', key);
+    const res2 = await invService.purchaseCrate(playerId, 'crate_vanguard_ops_01', key);
+
+    assert.equal(res2.idempotent, true);
+    assert.deepEqual(res1.crateItem, res2.crateItem);
+    assert.equal(res1.crateItem.instanceId, res2.crateItem.instanceId);
+  });
 });

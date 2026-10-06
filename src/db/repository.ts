@@ -387,7 +387,7 @@ export class VanguardRepository {
     item: InventoryItem,
     priceCredits: number,
     idempotencyKey: string
-  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string }> {
+  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string; item?: InventoryItem }> {
     if (!isDatabaseAvailable) {
       // In-memory fallback (DEV/TEST ONLY)
       const existingTx = this.memLedger.get(idempotencyKey);
@@ -454,12 +454,14 @@ export class VanguardRepository {
         [idempotencyKey]
       );
       if (idempRes.rows.length > 0) {
+        const itemRes = await client.query('SELECT * FROM inventory_items WHERE instance_id = $1', [item.instanceId]);
         await client.query('COMMIT');
         return {
           success: true,
           balanceAfter: parseInt(idempRes.rows[0].balance_after, 10),
           idempotent: true,
           transactionId: idempRes.rows[0].id,
+          item: itemRes.rows.length > 0 ? this.mapRowToInventoryItem(itemRes.rows[0]) : undefined,
         };
       }
 
@@ -543,7 +545,7 @@ export class VanguardRepository {
     rewardItem: InventoryItem,
     priceCredits: number,
     idempotencyKey: string
-  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string }> {
+  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string; item?: InventoryItem }> {
     if (!isDatabaseAvailable) {
       // In-memory fallback (DEV/TEST ONLY)
       const existingTx = this.memLedger.get(idempotencyKey);
@@ -617,12 +619,14 @@ export class VanguardRepository {
         [idempotencyKey]
       );
       if (idempRes.rows.length > 0) {
+        const itemRes = await client.query('SELECT * FROM inventory_items WHERE instance_id = $1', [rewardItem.instanceId]);
         await client.query('COMMIT');
         return {
           success: true,
           balanceAfter: parseInt(idempRes.rows[0].balance_after, 10),
           idempotent: true,
           transactionId: idempRes.rows[0].id,
+          item: itemRes.rows.length > 0 ? this.mapRowToInventoryItem(itemRes.rows[0]) : undefined,
         };
       }
 
@@ -727,7 +731,7 @@ export class VanguardRepository {
     crateItem: InventoryItem,
     priceCredits: number,
     idempotencyKey: string
-  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string }> {
+  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string; crateItem?: InventoryItem }> {
     if (!isDatabaseAvailable) {
       // In-memory fallback (DEV/TEST ONLY)
       const existingTx = this.memLedger.get(idempotencyKey);
@@ -794,12 +798,14 @@ export class VanguardRepository {
         [idempotencyKey]
       );
       if (idempRes.rows.length > 0) {
+        const itemRes = await client.query('SELECT * FROM inventory_items WHERE instance_id = $1', [crateItem.instanceId]);
         await client.query('COMMIT');
         return {
           success: true,
           balanceAfter: parseInt(idempRes.rows[0].balance_after, 10),
           idempotent: true,
           transactionId: idempRes.rows[0].id,
+          crateItem: itemRes.rows.length > 0 ? this.mapRowToInventoryItem(itemRes.rows[0]) : undefined,
         };
       }
 

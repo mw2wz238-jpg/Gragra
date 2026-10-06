@@ -330,7 +330,7 @@ export class VanguardInventoryService {
       const response = {
         success: true,
         idempotent: true,
-        item: existing || item,
+        item: atomicRes.item || existing || item,
         balanceAfter: currentBalance,
         transactionId: atomicRes.transactionId,
       };
@@ -437,7 +437,7 @@ export class VanguardInventoryService {
       const response = {
         success: true,
         idempotent: true,
-        crateItem: existingInDb || crateItem,
+        crateItem: atomicRes.crateItem || existingInDb || crateItem,
         balanceAfter: currentBalance,
         transactionId: atomicRes.transactionId,
       };
@@ -569,14 +569,14 @@ export class VanguardInventoryService {
     }
 
     if (atomicRes.idempotent) {
-      const existing = inv.get(skinInstanceId);
-      if (existing) {
-        const skinDefFromExisting = VANGUARD_SKINS[existing.skinId!];
+      const rewardedItem = atomicRes.item || inv.get(skinInstanceId);
+      if (rewardedItem) {
+        const skinDefFromExisting = VANGUARD_SKINS[rewardedItem.skinId!];
         const response = {
           success: true,
           idempotent: true,
           droppedSkin: skinDefFromExisting,
-          item: existing,
+          item: rewardedItem,
           balanceAfter: atomicRes.balanceAfter,
           transactionId: atomicRes.transactionId,
         };
