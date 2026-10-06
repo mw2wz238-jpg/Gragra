@@ -285,8 +285,27 @@ export class VanguardInventoryService {
       };
     }
 
-    // Prepare InventoryItem object
-    const instanceId = `inst_skin_${playerId}_${skinId}_${Date.now()}`;
+    const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 40);
+    const instanceId = `inst_skin_${playerId}_${skinId}_${cleanKey}`.substring(0, 120);
+
+    const inv = this.playerInventories.get(playerId) || new Map();
+    if (!this.playerInventories.has(playerId)) {
+      this.playerInventories.set(playerId, inv);
+    }
+
+    const existing = inv.get(instanceId);
+    if (existing) {
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      const response = {
+        success: true,
+        idempotent: true,
+        item: existing,
+        balanceAfter: currentBalance,
+      };
+      this.processedTransactions.set(key, response);
+      return response;
+    }
+
     const item: InventoryItem = {
       instanceId,
       itemType: 'SKIN',
@@ -314,27 +333,39 @@ export class VanguardInventoryService {
       };
     }
 
-    // Synchronize local memory cache
-    this.playerWallets.set(playerId, atomicRes.balanceAfter);
-    const inv = this.playerInventories.get(playerId) || new Map();
-    if (!this.playerInventories.has(playerId)) {
-      this.playerInventories.set(playerId, inv);
+    const currentBalance = await vanguardRepository.getWallet(playerId);
+
+    if (atomicRes.idempotent) {
+      const existing = inv.get(instanceId);
+      const response = {
+        success: true,
+        idempotent: true,
+        item: existing || item,
+        balanceAfter: currentBalance,
+        transactionId: atomicRes.transactionId,
+      };
+      this.processedTransactions.set(key, response);
+      return response;
     }
+
+    // Synchronize local memory cache (first time purchase)
+    this.playerWallets.set(playerId, currentBalance);
     inv.set(instanceId, item);
 
-    this.processedTransactions.set(key, { item, balanceAfter: atomicRes.balanceAfter, transactionId: atomicRes.transactionId });
-
-    return {
+    const response = {
       success: true,
       idempotent: atomicRes.idempotent,
       item,
-      balanceAfter: atomicRes.balanceAfter,
+      balanceAfter: currentBalance,
       transactionId: atomicRes.transactionId,
     };
+    this.processedTransactions.set(key, response);
+    return response;
   }
 
   /**
    * Purchase crate from Shop with credits
+   * Uses single atomic PostgreSQL transaction: DEBIT wallet + INSERT inventory_items
    */
   public async purchaseCrate(
     playerId: string,
@@ -361,40 +392,28 @@ export class VanguardInventoryService {
       };
     }
 
-    // Deduct price atomically via persistent VanguardRepository
-    const walletRes = await vanguardRepository.modifyWallet(
-      playerId,
-      crateDef.priceCredits,
-      'DEBIT',
-      'SHOP_PURCHASE',
-      key
-    );
+    const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 40);
+    const instanceId = `inst_crate_${playerId}_${crateId}_${cleanKey}`.substring(0, 120);
 
-    if (!walletRes.success) {
-      return {
-        success: false,
-        balanceAfter: walletRes.balanceAfter,
-        idempotent: walletRes.idempotent,
-        reason: walletRes.reason,
-      };
+    const inv = this.playerInventories.get(playerId) || new Map();
+    if (!this.playerInventories.has(playerId)) {
+      this.playerInventories.set(playerId, inv);
     }
 
-    // Synchronize local memory cache
-    this.playerWallets.set(playerId, walletRes.balanceAfter);
-
-    if (walletRes.idempotent && this.processedTransactions.has(key)) {
-      const cached = this.processedTransactions.get(key);
-      return {
+    const existing = inv.get(instanceId);
+    if (existing) {
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      const response = {
         success: true,
         idempotent: true,
-        crateItem: cached.crateItem,
-        balanceAfter: walletRes.balanceAfter,
-        transactionId: walletRes.transactionId,
+        crateItem: existing,
+        balanceAfter: currentBalance,
       };
+      this.processedTransactions.set(key, response);
+      return response;
     }
 
-    // Add crate to inventory
-    const instanceId = `inst_crate_${playerId}_${crateId}_${Date.now()}`;
+    // Prepare InventoryItem object
     const crateItem: InventoryItem = {
       instanceId,
       itemType: 'CRATE',
@@ -404,24 +423,51 @@ export class VanguardInventoryService {
       source: 'SHOP_PURCHASE',
     };
 
-    const inv = this.playerInventories.get(playerId) || new Map();
-    if (!this.playerInventories.has(playerId)) {
-      this.playerInventories.set(playerId, inv);
+    // Execute atomic DEBIT wallet + INSERT inventory_items in a single PostgreSQL transaction
+    const atomicRes = await vanguardRepository.purchaseCrateAtomic(
+      playerId,
+      crateItem,
+      crateDef.priceCredits,
+      key
+    );
+
+    if (!atomicRes.success) {
+      return {
+        success: false,
+        balanceAfter: atomicRes.balanceAfter,
+        idempotent: atomicRes.idempotent,
+        reason: atomicRes.reason,
+      };
     }
+
+    const currentBalance = await vanguardRepository.getWallet(playerId);
+
+    if (atomicRes.idempotent) {
+      const existingInDb = inv.get(instanceId);
+      const response = {
+        success: true,
+        idempotent: true,
+        crateItem: existingInDb || crateItem,
+        balanceAfter: currentBalance,
+        transactionId: atomicRes.transactionId,
+      };
+      this.processedTransactions.set(key, response);
+      return response;
+    }
+
+    // Synchronize local memory cache AFTER successful PostgreSQL commit (first time purchase)
+    this.playerWallets.set(playerId, currentBalance);
     inv.set(instanceId, crateItem);
 
-    // Persist purchased crate to PostgreSQL inventory_items table
-    await vanguardRepository.addInventoryItem(crateItem, playerId);
-
-    this.processedTransactions.set(key, { crateItem, balanceAfter: walletRes.balanceAfter, transactionId: walletRes.transactionId });
-
-    return {
+    const response = {
       success: true,
-      idempotent: walletRes.idempotent,
+      idempotent: atomicRes.idempotent,
       crateItem,
-      balanceAfter: walletRes.balanceAfter,
-      transactionId: walletRes.transactionId,
+      balanceAfter: currentBalance,
+      transactionId: atomicRes.transactionId,
     };
+    this.processedTransactions.set(key, response);
+    return response;
   }
 
   /**
@@ -455,6 +501,24 @@ export class VanguardInventoryService {
       };
     }
 
+    const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 40);
+    const skinInstanceId = `inst_reward_${playerId}_${cleanKey}`.substring(0, 120);
+
+    const existingReward = inv.get(skinInstanceId);
+    if (existingReward) {
+      const skinDef = VANGUARD_SKINS[existingReward.skinId!];
+      const currentBalance = await vanguardRepository.getWallet(playerId);
+      const response = {
+        success: true,
+        idempotent: true,
+        droppedSkin: skinDef,
+        item: existingReward,
+        balanceAfter: currentBalance,
+      };
+      this.processedTransactions.set(key, response);
+      return response;
+    }
+
     const crateItem = inv.get(crateInstanceId);
     if (!crateItem || crateItem.itemType !== 'CRATE' || !crateItem.crateId) {
       return { success: false, reason: 'CRATE_NOT_FOUND' };
@@ -486,7 +550,6 @@ export class VanguardInventoryService {
     }
 
     // 2. Construct won reward item
-    const skinInstanceId = `inst_skin_${playerId}_${skinDef.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const wonItem: InventoryItem = {
       instanceId: skinInstanceId,
       itemType: 'SKIN',
@@ -513,6 +576,23 @@ export class VanguardInventoryService {
         idempotent: atomicRes.idempotent,
         reason: atomicRes.reason,
       };
+    }
+
+    if (atomicRes.idempotent) {
+      const existing = inv.get(skinInstanceId);
+      if (existing) {
+        const skinDefFromExisting = VANGUARD_SKINS[existing.skinId!];
+        const response = {
+          success: true,
+          idempotent: true,
+          droppedSkin: skinDefFromExisting,
+          item: existing,
+          balanceAfter: atomicRes.balanceAfter,
+          transactionId: atomicRes.transactionId,
+        };
+        this.processedTransactions.set(key, response);
+        return response;
+      }
     }
 
     // 4. Synchronize local RAM state AFTER successful PostgreSQL commit

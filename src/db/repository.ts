@@ -718,6 +718,163 @@ export class VanguardRepository {
   }
 
   /**
+   * Atomic, ACID crate purchase in a single PostgreSQL transaction:
+   * BEGIN -> lock wallet FOR UPDATE -> validate balance ->
+   * DEBIT wallet + ledger -> INSERT crate item -> COMMIT
+   */
+  public async purchaseCrateAtomic(
+    playerId: string,
+    crateItem: InventoryItem,
+    priceCredits: number,
+    idempotencyKey: string
+  ): Promise<{ success: boolean; balanceAfter: number; idempotent: boolean; transactionId?: string; reason?: string }> {
+    if (!isDatabaseAvailable) {
+      // In-memory fallback (DEV/TEST ONLY)
+      const existingTx = this.memLedger.get(idempotencyKey);
+      if (existingTx) {
+        return {
+          success: true,
+          balanceAfter: existingTx.balanceAfter,
+          idempotent: true,
+          transactionId: existingTx.transactionId,
+        };
+      }
+
+      const currentBalance = this.memWallets.get(playerId) ?? 0;
+      if (currentBalance < priceCredits) {
+        return {
+          success: false,
+          balanceAfter: currentBalance,
+          idempotent: false,
+          reason: 'INSUFFICIENT_CREDITS',
+        };
+      }
+
+      const newBalance = currentBalance - priceCredits;
+      this.memWallets.set(playerId, newBalance);
+
+      let invMap = this.memInventory.get(playerId);
+      if (!invMap) {
+        invMap = new Map();
+        this.memInventory.set(playerId, invMap);
+      }
+      invMap.set(crateItem.instanceId, { ...crateItem });
+
+      const entry: WalletLedgerEntry = {
+        transactionId: `tx_mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        playerId,
+        type: 'DEBIT',
+        amount: priceCredits,
+        source: 'SHOP_PURCHASE',
+        timestamp: Date.now(),
+        idempotencyKey,
+        balanceAfter: newBalance,
+      };
+      this.memLedger.set(idempotencyKey, entry);
+
+      return {
+        success: true,
+        balanceAfter: newBalance,
+        idempotent: false,
+        transactionId: entry.transactionId,
+      };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Ensure user and wallet exist
+      await client.query('INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [playerId, 'Vanguard_Operator']);
+      await client.query('INSERT INTO wallets (player_id, balance) VALUES ($1, 0) ON CONFLICT (player_id) DO NOTHING', [playerId]);
+
+      // 2. Check for duplicate idempotency_key
+      const idempRes = await client.query(
+        'SELECT id, balance_after FROM wallet_ledger WHERE idempotency_key = $1',
+        [idempotencyKey]
+      );
+      if (idempRes.rows.length > 0) {
+        await client.query('COMMIT');
+        return {
+          success: true,
+          balanceAfter: parseInt(idempRes.rows[0].balance_after, 10),
+          idempotent: true,
+          transactionId: idempRes.rows[0].id,
+        };
+      }
+
+      // 3. Lock wallet row FOR UPDATE
+      const walletRes = await client.query(
+        'SELECT balance FROM wallets WHERE player_id = $1 FOR UPDATE',
+        [playerId]
+      );
+      const currentBalance = parseInt(walletRes.rows[0].balance, 10);
+
+      // 4. Validate balance sufficiency
+      if (currentBalance < priceCredits) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          balanceAfter: currentBalance,
+          idempotent: false,
+          reason: 'INSUFFICIENT_CREDITS',
+        };
+      }
+
+      // 5. Update wallet balance
+      const newBalance = currentBalance - priceCredits;
+      await client.query(
+        'UPDATE wallets SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE player_id = $2',
+        [newBalance, playerId]
+      );
+
+      // 6. Insert audit record in wallet_ledger
+      const ledgerRes = await client.query(
+        `INSERT INTO wallet_ledger (player_id, type, amount, source, idempotency_key, balance_after)
+         VALUES ($1, 'DEBIT', $2, 'SHOP_PURCHASE', $3, $4)
+         RETURNING id`,
+        [playerId, priceCredits, idempotencyKey, newBalance]
+      );
+
+      // 7. Insert purchased crate into inventory_items
+      const itemId = crateItem.itemType === 'CRATE' ? (crateItem.crateId || '') : '';
+      await client.query(
+        `INSERT INTO inventory_items (instance_id, player_id, item_type, item_id, weapon_id, source, is_equipped, acquired_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0))
+         ON CONFLICT (instance_id) DO UPDATE SET
+           is_equipped = EXCLUDED.is_equipped,
+           source = EXCLUDED.source`,
+        [
+          crateItem.instanceId,
+          playerId,
+          crateItem.itemType,
+          itemId,
+          null,
+          crateItem.source || 'SHOP_PURCHASE',
+          crateItem.equipped || false,
+          crateItem.acquiredAt || Date.now(),
+        ]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        balanceAfter: newBalance,
+        idempotent: false,
+        transactionId: ledgerRes.rows[0].id,
+      };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+
+
+  /**
    * Retrieve ledger audit history for a player
    */
   public async getWalletLedger(playerId: string, limit = 20): Promise<WalletLedgerEntry[]> {

@@ -226,4 +226,129 @@ describe('ALPHA.61 — Atomic Crate Opening Repository Transaction', () => {
     const finalBalA = await vanguardRepository.getWallet(playerA);
     assert.strictEqual(finalBalA, 1500);
   });
+
+  it('should purchase crate atomically via purchaseCrateAtomic and ROLLBACK entire transaction on failure', async () => {
+    if (!isDatabaseAvailable) return;
+
+    const playerId = `purchase_atomic_user_${Date.now()}`;
+
+    // 1. Fund wallet with 400 credits (ops crate costs 500)
+    await vanguardRepository.modifyWallet(playerId, 400, 'CREDIT', 'DAILY_BONUS', `fund_${playerId}`);
+
+    const crateItem = {
+      instanceId: `crate_atomic_fail_${playerId}`,
+      itemType: 'CRATE',
+      crateId: 'crate_vanguard_ops_01',
+      equipped: false,
+      acquiredAt: Date.now(),
+      source: 'SHOP_PURCHASE',
+    };
+
+    // 2. Try to purchase crate with insufficient funds (400 < 500) -> ROLLBACK with INSUFFICIENT_CREDITS
+    const failRes = await vanguardRepository.purchaseCrateAtomic(
+      playerId,
+      crateItem,
+      500,
+      `buy_fail_tx_${playerId}`
+    );
+    assert.strictEqual(failRes.success, false);
+    assert.strictEqual(failRes.reason, 'INSUFFICIENT_CREDITS');
+
+    // Verify database state: no debit, no crate in inventory_items
+    const dbBal1 = await vanguardRepository.getWallet(playerId);
+    assert.strictEqual(dbBal1, 400);
+
+    const inv1 = await vanguardRepository.getInventory(playerId);
+    assert.strictEqual(inv1.some(i => i.instanceId === crateItem.instanceId), false);
+
+    // 3. Fund wallet with 1000 credits more (total 1400)
+    await vanguardRepository.modifyWallet(playerId, 1000, 'CREDIT', 'DAILY_BONUS', `fund_more_${playerId}`);
+
+    // 4. Purchase crate atomically
+    const buyRes = await vanguardRepository.purchaseCrateAtomic(
+      playerId,
+      crateItem,
+      500,
+      `buy_ok_tx_${playerId}`
+    );
+    assert.strictEqual(buyRes.success, true);
+    assert.strictEqual(buyRes.balanceAfter, 900);
+
+    // Verify database state: balance is 900, crate exists in inventory_items
+    const dbBal2 = await vanguardRepository.getWallet(playerId);
+    assert.strictEqual(dbBal2, 900);
+
+    const inv2 = await vanguardRepository.getInventory(playerId);
+    assert.strictEqual(inv2.some(i => i.instanceId === crateItem.instanceId), true);
+
+    // 5. Test idempotency on replay with identical key
+    const replayRes = await vanguardRepository.purchaseCrateAtomic(
+      playerId,
+      crateItem,
+      500,
+      `buy_ok_tx_${playerId}`
+    );
+    assert.strictEqual(replayRes.success, true);
+    assert.strictEqual(replayRes.idempotent, true);
+    assert.strictEqual(replayRes.balanceAfter, 900);
+  });
+
+  it('should ROLLBACK and throw error if query inside openCrateAtomic fails due to DB constraint violation', async () => {
+    if (!isDatabaseAvailable) return;
+
+    const playerId = `atomic_crate_rollback_${Date.now()}`;
+    const idempKey = `open_rollback_err_${playerId}`;
+
+    // 1. Give 1000 credits
+    await vanguardRepository.modifyWallet(playerId, 1000, 'CREDIT', 'DAILY_BONUS', `fund_${playerId}`);
+
+    // 2. Insert valid crate
+    const crateItem = {
+      instanceId: `crate_rb_${playerId}`,
+      itemType: 'CRATE',
+      crateId: 'crate_vanguard_ops_01',
+      equipped: false,
+      acquiredAt: Date.now(),
+      source: 'SHOP_PURCHASE',
+    };
+    await vanguardRepository.addInventoryItem(crateItem, playerId);
+
+    // 3. Construct invalid reward item that violates CHECK (item_type IN ('SKIN', 'CRATE'))
+    const invalidRewardItem = {
+      instanceId: `skin_rb_${playerId}`,
+      itemType: 'INVALID_TYPE', // Constraint violation!
+      skinId: 'skin_ar4_vulcan',
+      weaponId: 'vanguard_rifle',
+      equipped: false,
+      acquiredAt: Date.now(),
+      source: 'CRATE_DROP',
+    };
+
+    // 4. Try to open crate. It should throw an error because of DB constraint error
+    let thrownError = null;
+    try {
+      await vanguardRepository.openCrateAtomic(
+        playerId,
+        crateItem.instanceId,
+        invalidRewardItem,
+        500,
+        idempKey
+      );
+    } catch (err) {
+      thrownError = err;
+    }
+
+    assert.ok(thrownError, 'An error should have been thrown due to constraint violation');
+
+    // 5. Verify database state is completely ROLLED BACK
+    const finalBal = await vanguardRepository.getWallet(playerId);
+    assert.strictEqual(finalBal, 1000, 'Wallet balance should not be debited');
+
+    const inv = await vanguardRepository.getInventory(playerId);
+    assert.strictEqual(inv.some(i => i.instanceId === crateItem.instanceId), true, 'Crate should still exist');
+    assert.strictEqual(inv.some(i => i.instanceId === invalidRewardItem.instanceId), false, 'No invalid item should be inserted');
+
+    const ledger = await vanguardRepository.getWalletLedger(playerId);
+    assert.strictEqual(ledger.some(l => l.idempotencyKey === idempKey), false, 'No ledger entry should be created');
+  });
 });
