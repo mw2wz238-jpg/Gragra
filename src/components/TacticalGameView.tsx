@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { tacticalAudio } from '../audio/tactical-audio.ts';
 import { buildIndustrialZoneEnvironment, buildParkingMapEnvironment } from '../maps/builder.ts';
 import { getMapDefinition } from '../maps/index.ts';
-import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundPhase } from '../shared/types.ts';
+import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundEndResult, RoundPhase } from '../shared/types.ts';
 import { VANGUARD_GRENADES, VANGUARD_SKINS, VANGUARD_WEAPONS } from '../shared/types.ts';
 
 export type ActiveSlot = 'primary' | 'pistol' | 'knife' | 'he' | 'smoke' | 'flash';
@@ -23,7 +23,7 @@ interface TacticalGameViewProps {
   username: string;
   assignedTeam: 'alpha' | 'omega';
   onMatchComplete: (result: {
-    result: 'VICTORY' | 'DEFEAT';
+    result: 'VICTORY' | 'DEFEAT' | 'DRAW';
     score: string;
     kills: number;
     deaths: number;
@@ -101,6 +101,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   const [isDead, setIsDead] = useState(false);
   const [spectatorTargetName, setSpectatorTargetName] = useState<string>('Teammate');
   const [spectatorTargetHp, setSpectatorTargetHp] = useState<number>(100);
+  const [lastRoundResult, setLastRoundResult] = useState<RoundEndResult | null>(null);
 
   // Nearby Dropped Weapon for pickup
   const [nearbyDroppedWeapon, setNearbyDroppedWeapon] = useState<DroppedWeaponEntity | null>(null);
@@ -892,6 +893,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           setBombPlanted(snap.bomb.isPlanted);
           bombPlantedRef.current = snap.bomb.isPlanted;
           bombPositionRef.current = snap.bomb.position;
+          if (snap.lastRoundResult) {
+            setLastRoundResult(snap.lastRoundResult);
+          }
 
           // Update local player state
           const me = snap.players.find((p: any) => p.id === playerId);
@@ -1062,10 +1066,12 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
         } else if (data.type === 'MATCH_OVER') {
           const winnerTeam = data.winner;
           const isVictory = winnerTeam === assignedTeam;
+          const isDraw = winnerTeam === 'draw';
+          const matchResult: 'VICTORY' | 'DEFEAT' | 'DRAW' = isDraw ? 'DRAW' : (isVictory ? 'VICTORY' : 'DEFEAT');
           const duration = Math.round((Date.now() - statsRef.current.startTime) / 1000);
 
           onMatchComplete({
-            result: isVictory ? 'VICTORY' : 'DEFEAT',
+            result: matchResult,
             score: `${scores.alpha} : ${scores.omega}`,
             kills: statsRef.current.kills,
             deaths: statsRef.current.deaths,
@@ -1696,6 +1702,28 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           </div>
         ))}
       </div>
+
+      {/* AUTHORITATIVE ROUND END / REWARDS BANNER */}
+      {(roundPhase === 'ROUND_END' || roundPhase === 'REWARDS') && lastRoundResult && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 px-8 py-3.5 bg-black/85 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl z-30 pointer-events-none">
+          <div className="flex items-center gap-3">
+            <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${lastRoundResult.winner === 'alpha' ? 'bg-cyan-400 shadow-[0_0_10px_#22d3ee]' : 'bg-rose-500 shadow-[0_0_10px_#f43f5e]'}`} />
+            <span className={`text-xl font-black font-['Chakra_Petch'] tracking-widest uppercase ${
+              lastRoundResult.winner === assignedTeam ? 'text-emerald-400' : 'text-rose-400'
+            }`}>
+              {lastRoundResult.winner === assignedTeam ? 'ROUND VICTORY' : 'ROUND DEFEAT'}
+            </span>
+            <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${lastRoundResult.winner === 'alpha' ? 'bg-cyan-400 shadow-[0_0_10px_#22d3ee]' : 'bg-rose-500 shadow-[0_0_10px_#f43f5e]'}`} />
+          </div>
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className={`font-bold uppercase ${lastRoundResult.winner === 'alpha' ? 'text-cyan-400' : 'text-rose-400'}`}>
+              TEAM {lastRoundResult.winner.toUpperCase()}
+            </span>
+            <span className="text-slate-500">•</span>
+            <span className="text-slate-300 font-semibold">{lastRoundResult.reason}</span>
+          </div>
+        </div>
+      )}
 
       {/* DROPPED WEAPON PICKUP PROMPT */}
       {nearbyDroppedWeapon && !isDead && (

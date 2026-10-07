@@ -92,8 +92,16 @@ export class RoundStateMachine {
     return (
       this.teamAlphaScore >= this.targetWins ||
       this.teamOmegaScore >= this.targetWins ||
+      (this.teamAlphaScore + this.teamOmegaScore) >= this.maxRounds ||
       this.roundNumber > this.maxRounds
     );
+  }
+
+  public getWinner(): 'alpha' | 'omega' | 'draw' | null {
+    if (!this.isMatchOver()) return null;
+    if (this.teamAlphaScore > this.teamOmegaScore) return 'alpha';
+    if (this.teamOmegaScore > this.teamAlphaScore) return 'omega';
+    return 'draw';
   }
 
   public canShoot(): boolean {

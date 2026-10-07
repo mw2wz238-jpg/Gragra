@@ -101,5 +101,136 @@ describe('Vanguard Round State Machine (Phases 10, 11 & Complete Round Loop)', (
     const finalStep = rsm.advancePhase();
     assert.equal(finalStep.phase, 'MATCH_END');
     assert.equal(finalStep.matchOver, true);
+    assert.equal(rsm.getWinner(), 'alpha');
+  });
+
+  describe('Etap 1: Match Victory Conditions (13:0, 13:11, 0:13, 11:13)', () => {
+    it('13:0 victory for Alpha -> MATCH_END immediately after 13th win', () => {
+      const rsm = new RoundStateMachine(24, 13);
+      for (let r = 1; r <= 13; r++) {
+        assert.equal(rsm.getRoundNumber(), r);
+        assert.equal(rsm.getPhase(), 'BUY');
+        rsm.advancePhase(); // LIVE
+        rsm.advancePhase('alpha'); // ROUND_END
+        rsm.advancePhase(); // REWARDS
+        rsm.advancePhase(); // BUY or MATCH_END
+      }
+      assert.equal(rsm.getPhase(), 'MATCH_END');
+      assert.equal(rsm.isMatchOver(), true);
+      assert.equal(rsm.getScores().alpha, 13);
+      assert.equal(rsm.getScores().omega, 0);
+      assert.equal(rsm.getWinner(), 'alpha');
+      assert.equal(rsm.getRoundNumber(), 13);
+    });
+
+    it('13:11 victory for Alpha -> MATCH_END after 24 rounds', () => {
+      const rsm = new RoundStateMachine(24, 13);
+      // Simulate 12 Alpha wins and 11 Omega wins (23 rounds)
+      for (let r = 1; r <= 23; r++) {
+        rsm.advancePhase(); // LIVE
+        if (r <= 12) {
+          rsm.advancePhase('alpha');
+        } else {
+          rsm.advancePhase('omega');
+        }
+        rsm.advancePhase(); // REWARDS
+        rsm.advancePhase(); // Next round BUY
+      }
+      assert.equal(rsm.getScores().alpha, 12);
+      assert.equal(rsm.getScores().omega, 11);
+      assert.equal(rsm.getRoundNumber(), 24);
+      assert.equal(rsm.isMatchOver(), false);
+
+      // Round 24: Alpha wins 13th point
+      rsm.advancePhase(); // LIVE
+      rsm.advancePhase('alpha'); // ROUND_END (Alpha score = 13)
+      rsm.advancePhase(); // REWARDS
+      const finalStep = rsm.advancePhase();
+
+      assert.equal(finalStep.phase, 'MATCH_END');
+      assert.equal(finalStep.matchOver, true);
+      assert.equal(rsm.getScores().alpha, 13);
+      assert.equal(rsm.getScores().omega, 11);
+      assert.equal(rsm.getWinner(), 'alpha');
+      assert.equal(rsm.getRoundNumber(), 24);
+    });
+
+    it('0:13 victory for Omega -> MATCH_END immediately after 13th win', () => {
+      const rsm = new RoundStateMachine(24, 13);
+      for (let r = 1; r <= 13; r++) {
+        rsm.advancePhase(); // LIVE
+        rsm.advancePhase('omega'); // ROUND_END
+        rsm.advancePhase(); // REWARDS
+        rsm.advancePhase(); // BUY or MATCH_END
+      }
+      assert.equal(rsm.getPhase(), 'MATCH_END');
+      assert.equal(rsm.isMatchOver(), true);
+      assert.equal(rsm.getScores().alpha, 0);
+      assert.equal(rsm.getScores().omega, 13);
+      assert.equal(rsm.getWinner(), 'omega');
+      assert.equal(rsm.getRoundNumber(), 13);
+    });
+
+    it('11:13 victory for Omega -> MATCH_END after 24 rounds', () => {
+      const rsm = new RoundStateMachine(24, 13);
+      // Simulate 11 Alpha wins and 12 Omega wins (23 rounds)
+      for (let r = 1; r <= 23; r++) {
+        rsm.advancePhase(); // LIVE
+        if (r <= 11) {
+          rsm.advancePhase('alpha');
+        } else {
+          rsm.advancePhase('omega');
+        }
+        rsm.advancePhase(); // REWARDS
+        rsm.advancePhase(); // Next round BUY
+      }
+      assert.equal(rsm.getScores().alpha, 11);
+      assert.equal(rsm.getScores().omega, 12);
+      assert.equal(rsm.getRoundNumber(), 24);
+      assert.equal(rsm.isMatchOver(), false);
+
+      // Round 24: Omega wins 13th point
+      rsm.advancePhase(); // LIVE
+      rsm.advancePhase('omega'); // ROUND_END (Omega score = 13)
+      rsm.advancePhase(); // REWARDS
+      const finalStep = rsm.advancePhase();
+
+      assert.equal(finalStep.phase, 'MATCH_END');
+      assert.equal(finalStep.matchOver, true);
+      assert.equal(rsm.getScores().alpha, 11);
+      assert.equal(rsm.getScores().omega, 13);
+      assert.equal(rsm.getWinner(), 'omega');
+      assert.equal(rsm.getRoundNumber(), 24);
+    });
+  });
+
+  describe('Etap 1: 24-Round Boundary & 12:12 DRAW Rule', () => {
+    it('12:12 after 24 rounds -> DRAW -> MATCH_END (never starts Round 25)', () => {
+      const rsm = new RoundStateMachine(24, 13);
+      // 12 rounds Alpha, 12 rounds Omega
+      for (let r = 1; r <= 24; r++) {
+        rsm.advancePhase(); // LIVE
+        if (r <= 12) {
+          rsm.advancePhase('alpha');
+        } else {
+          rsm.advancePhase('omega');
+        }
+        rsm.advancePhase(); // REWARDS
+        rsm.advancePhase(); // Round 2..24 BUY or MATCH_END after round 24
+      }
+
+      assert.equal(rsm.getPhase(), 'MATCH_END');
+      assert.equal(rsm.isMatchOver(), true);
+      assert.equal(rsm.getScores().alpha, 12);
+      assert.equal(rsm.getScores().omega, 12);
+      assert.equal(rsm.getWinner(), 'draw');
+      assert.equal(rsm.getRoundNumber(), 24, 'Round number must remain 24 and never reach 25');
+
+      // Attempting to advance again in MATCH_END remains in MATCH_END
+      const nextStep = rsm.advancePhase();
+      assert.equal(nextStep.phase, 'MATCH_END');
+      assert.equal(nextStep.matchOver, true);
+      assert.equal(rsm.getRoundNumber(), 24);
+    });
   });
 });

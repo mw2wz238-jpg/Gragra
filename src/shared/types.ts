@@ -30,6 +30,26 @@ export type RoundPhase =
   | 'REWARDS'
   | 'MATCH_END';
 
+export interface RoundEndResult {
+  winner: 'alpha' | 'omega';
+  reason: string;
+}
+
+export interface GameSnapshot {
+  matchId: string;
+  round: number;
+  phase: RoundPhase;
+  phaseTimeRemainingSec: number;
+  scores: { alpha: number; omega: number };
+  bomb: any;
+  players: any[];
+  activeGrenades: any[];
+  activeSmokes: any[];
+  droppedWeapons: any[];
+  lossStreaks: { alpha: number; omega: number };
+  lastRoundResult?: RoundEndResult;
+}
+
 export interface WeaponDef {
   id: string;
   name: string;

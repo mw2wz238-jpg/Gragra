@@ -11,7 +11,7 @@ import { authFetch } from '../shared/auth-client.ts';
 interface MatchEndViewProps {
   matchId: string;
   playerId: string;
-  result: 'VICTORY' | 'DEFEAT';
+  result: 'VICTORY' | 'DEFEAT' | 'DRAW';
   score: string;
   kills: number;
   deaths: number;
@@ -74,6 +74,7 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
   }, [matchId, playerId, result, kills, deaths, assists, headshots, mvp, score, durationSeconds]);
 
   const isVictory = result === 'VICTORY';
+  const isDraw = result === 'DRAW';
 
   return (
     <div className="relative w-screen h-screen bg-[#07090e] flex flex-col items-center justify-center p-6 text-white font-['Plus_Jakarta_Sans'] select-none overflow-hidden">
@@ -82,6 +83,8 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
         className={`absolute inset-0 opacity-20 pointer-events-none ${
           isVictory
             ? 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-cyan-600/40 via-transparent to-transparent'
+            : isDraw
+            ? 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-600/40 via-transparent to-transparent'
             : 'bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-rose-600/40 via-transparent to-transparent'
         }`}
       />
@@ -93,6 +96,8 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
             className={`inline-block px-5 py-1.5 rounded-full text-xs font-mono font-bold tracking-widest uppercase mb-3 border ${
               isVictory
                 ? 'bg-cyan-950/60 border-cyan-500/40 text-cyan-400'
+                : isDraw
+                ? 'bg-amber-950/60 border-amber-500/40 text-amber-400'
                 : 'bg-rose-950/60 border-rose-500/40 text-rose-400'
             }`}
           >
@@ -101,10 +106,14 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
 
           <h1
             className={`text-5xl font-black font-['Chakra_Petch'] tracking-wider uppercase mb-2 ${
-              isVictory ? 'text-cyan-400 drop-shadow-[0_0_20px_#06b6d4]' : 'text-rose-500 drop-shadow-[0_0_20px_#f43f5e]'
+              isVictory
+                ? 'text-cyan-400 drop-shadow-[0_0_20px_#06b6d4]'
+                : isDraw
+                ? 'text-amber-400 drop-shadow-[0_0_20px_#f59e0b]'
+                : 'text-rose-500 drop-shadow-[0_0_20px_#f43f5e]'
             }`}
           >
-            {isVictory ? 'VICTORY' : 'DEFEAT'}
+            {result}
           </h1>
 
           <div className="text-3xl font-black font-mono tracking-widest text-slate-200 tabular-nums">

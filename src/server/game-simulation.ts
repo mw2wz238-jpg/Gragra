@@ -92,10 +92,15 @@ export class GameSimulation {
   public phaseTimeRemainingSec = 15; // Initial buy phase
   private readonly startedAt = Date.now();
   private tickInterval: NodeJS.Timeout | null = null;
+  private lastRoundResult: { winner: 'alpha' | 'omega'; reason: string } | null = null;
   private onStateBroadcastListeners: Array<(snapshot: any) => void> = [];
   private onKillListeners: Array<(event: any) => void> = [];
-  private onMatchEndListeners: Array<(winner: 'alpha' | 'omega') => void> = [];
+  private onMatchEndListeners: Array<(winner: 'alpha' | 'omega' | 'draw') => void> = [];
   private onPlayerActionListeners: Array<(event: any) => void> = [];
+
+  public getLastRoundResult(): { winner: 'alpha' | 'omega'; reason: string } | null {
+    return this.lastRoundResult ? { ...this.lastRoundResult } : null;
+  }
   
   public onStateBroadcast(cb: (snapshot: any) => void): () => void {
     this.onStateBroadcastListeners.push(cb);
@@ -111,7 +116,7 @@ export class GameSimulation {
     };
   }
 
-  public onMatchEnd(cb: (winner: 'alpha' | 'omega') => void): () => void {
+  public onMatchEnd(cb: (winner: 'alpha' | 'omega' | 'draw') => void): () => void {
     this.onMatchEndListeners.push(cb);
     return () => {
       this.onMatchEndListeners = this.onMatchEndListeners.filter(l => l !== cb);
@@ -330,8 +335,7 @@ export class GameSimulation {
       } else if (currentPhase === 'REWARDS') {
         const next = this.roundSM.advancePhase();
         if (next.matchOver) {
-          const scores = this.roundSM.getScores();
-          const matchWinner = scores.alpha > scores.omega ? 'alpha' : 'omega';
+          const matchWinner = this.roundSM.getWinner() || 'draw';
           for (const l of this.onMatchEndListeners) {
             l(matchWinner);
           }
@@ -359,6 +363,7 @@ export class GameSimulation {
   private endRound(winner: 'alpha' | 'omega', reason: string) {
     if (this.roundSM.getPhase() !== 'LIVE') return;
 
+    this.lastRoundResult = { winner, reason };
     this.roundSM.advancePhase(winner);
     this.phaseTimeRemainingSec = 6; // 6s celebration
 
@@ -390,14 +395,30 @@ export class GameSimulation {
     let alphaIdx = 0;
     let omegaIdx = 0;
     for (const p of this.players.values()) {
+      const wasAlive = p.isAlive;
+
       p.isAlive = true;
       p.health = 100;
-      p.armor = 100;
       p.isDefusing = false;
       p.isPlanting = false;
       p.isReloading = false;
       p.spectatingTargetId = null;
       p.cash = this.economy.getBalance(p.id);
+
+      if (wasAlive) {
+        // SURVIVOR: Retains equipped primary/sidearm weapon, current ammo, and remaining armor
+        const weapon = VANGUARD_WEAPONS[p.equippedWeaponId] || VANGUARD_WEAPONS.vanguard_pistol;
+        p.ammoInMag = Math.min(Math.max(0, p.ammoInMag), weapon.magazineSize);
+        p.reserveAmmo = Math.min(Math.max(0, p.reserveAmmo), weapon.reserveAmmo);
+        p.armor = Math.max(0, p.armor);
+      } else {
+        // ELIMINATED: Reset to starter default pistol, full starter ammo, and zero armor
+        p.equippedWeaponId = 'vanguard_pistol';
+        const defaultWeapon = VANGUARD_WEAPONS.vanguard_pistol;
+        p.ammoInMag = defaultWeapon.magazineSize;
+        p.reserveAmmo = defaultWeapon.reserveAmmo;
+        p.armor = 0;
+      }
 
       if (p.isBot) {
         if (p.cash >= 3100) {
@@ -415,10 +436,6 @@ export class GameSimulation {
           this.handlePlayerBuy(p.id, 'item_kevlar');
         }
       }
-
-      const weapon = VANGUARD_WEAPONS[p.equippedWeaponId] || VANGUARD_WEAPONS.vanguard_rifle;
-      p.ammoInMag = weapon.magazineSize;
-      p.reserveAmmo = weapon.reserveAmmo;
 
       const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
       const idx = p.team === 'alpha' ? alphaIdx++ : omegaIdx++;
@@ -1082,6 +1099,7 @@ export class GameSimulation {
       activeSmokes: Array.from(this.grenadeManager.activeSmokes.values()),
       droppedWeapons: Array.from(this.droppedWeapons.values()),
       lossStreaks: this.economy.getLossStreaks(),
+      lastRoundResult: this.lastRoundResult || undefined,
     };
 
     for (const listener of this.onStateBroadcastListeners) {

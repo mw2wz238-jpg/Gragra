@@ -105,5 +105,42 @@ describe('Vanguard Authoritative Settlement & Idempotency (Phases 34, 35 & 36)',
     assert.equal(profileAfterSecond.walletCoins, 350, 'Coins must NOT double on replayed settlement');
     assert.equal(profileAfterSecond.matches, initialProfile.matches + 1, 'Match count must only increment once');
   });
+
+  it('should process DRAW result accurately with rating delta +2 and correct persistence', async () => {
+    if (!isDatabaseAvailable) return;
+
+    const service = new SettlementService();
+    const playerId3 = `test_player_draw_${Date.now()}`;
+    const matchId3 = `match_draw_${Date.now()}`;
+
+    const pBefore = await service.getOrCreateProfile(playerId3);
+    const initialRating = pBefore.rating;
+
+    const res = await service.processMatchSettlement({
+      matchId: matchId3,
+      playerId: playerId3,
+      idempotencyKey: `key_draw_${matchId3}`,
+      result: 'DRAW',
+      kills: 10,
+      deaths: 10,
+      assists: 5,
+      headshots: 4,
+      mvp: false,
+      score: '12:12',
+      durationSeconds: 1200,
+    });
+
+    assert.equal(res.success, true);
+    assert.equal(res.idempotent, false);
+    assert.equal(res.ratingChange, 2, 'Draw must give +2 rating change');
+    assert.equal(res.ratingAfter, initialRating + 2);
+    assert.equal(res.coinsEarned, 150);
+
+    const pAfter = await service.getOrCreateProfile(playerId3);
+    assert.equal(pAfter.rating, initialRating + 2);
+    assert.equal(pAfter.wins, pBefore.wins, 'Wins should not increment on draw');
+    assert.equal(pAfter.losses, pBefore.losses, 'Losses should not increment on draw');
+    assert.equal(pAfter.matches, pBefore.matches + 1, 'Matches played must increment by 1');
+  });
 });
 
