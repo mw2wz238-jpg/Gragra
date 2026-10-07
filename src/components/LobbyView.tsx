@@ -12,6 +12,7 @@ import {
   VANGUARD_SKINS,
   VANGUARD_WEAPONS,
 } from '../shared/types.ts';
+import { authFetch } from '../shared/auth-client.ts';
 import { Player3DPreview } from './Player3DPreview.tsx';
 
 interface LobbyViewProps {
@@ -58,12 +59,12 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
   // Fetch Authoritative Inventory & Wallet from Server
   const fetchInventory = () => {
-    fetch(`/api/inventory?playerId=${profile.id}`)
+    authFetch(`/api/inventory?playerId=${profile?.id || 'player_vanguard_01'}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.success) {
-          setInventory(data.inventory);
-          setWalletCredits(data.wallet);
+        if (data && data.success) {
+          setInventory(Array.isArray(data.inventory) ? data.inventory : []);
+          setWalletCredits(typeof data.wallet === 'number' ? data.wallet : 0);
           if (data.equippedSkins) {
             setEquippedSkins(data.equippedSkins);
           }
@@ -74,20 +75,20 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 
   useEffect(() => {
     fetchInventory();
-  }, [profile.id]);
+  }, [profile?.id]);
 
   const handleEquipSkin = async (item: InventoryItem) => {
     if (!item.skinId) return;
     tacticalAudio.playReload();
     try {
-      const res = await fetch('/api/inventory/equip', {
+      const res = await authFetch('/api/inventory/equip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: profile.id, instanceId: item.instanceId }),
+        body: JSON.stringify({ playerId: profile?.id, instanceId: item.instanceId }),
       });
       const data = await res.json();
-      if (data.success) {
-        setEquippedSkins(data.equippedSkins);
+      if (data && data.success) {
+        setEquippedSkins(data.equippedSkins || {});
         fetchInventory();
       }
     } catch (e) {
@@ -98,17 +99,17 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   const handleBuySkin = async (skinId: string) => {
     tacticalAudio.playUiClick();
     try {
-      const res = await fetch('/api/shop/purchase-skin', {
+      const res = await authFetch('/api/shop/purchase-skin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: profile.id, skinId }),
+        body: JSON.stringify({ playerId: profile?.id, skinId }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         tacticalAudio.playVictoryStinger();
         fetchInventory();
       } else {
-        alert(data.reason || 'Purchase failed');
+        alert(data?.reason || 'Purchase failed');
       }
     } catch (e) {
       console.error(e);
@@ -118,17 +119,17 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   const handleBuyCrate = async (crateId: string) => {
     tacticalAudio.playUiClick();
     try {
-      const res = await fetch('/api/shop/purchase-crate', {
+      const res = await authFetch('/api/shop/purchase-crate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: profile.id, crateId }),
+        body: JSON.stringify({ playerId: profile?.id, crateId }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data && data.success) {
         tacticalAudio.playVictoryStinger();
         fetchInventory();
       } else {
-        alert(data.reason || 'Crate purchase failed');
+        alert(data?.reason || 'Crate purchase failed');
       }
     } catch (e) {
       console.error(e);
@@ -153,13 +154,13 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
     setRouletteList(mockRoulette);
 
     try {
-      const res = await fetch('/api/crates/open', {
+      const res = await authFetch('/api/crates/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: profile.id, crateInstanceId: crateItem.instanceId }),
+        body: JSON.stringify({ playerId: profile?.id, crateInstanceId: crateItem.instanceId }),
       });
       const data = await res.json();
-      if (data.success && data.droppedSkin) {
+      if (data && data.success && data.droppedSkin) {
         // Play ticker audio
         let ticks = 0;
         const tickInterval = setInterval(() => {
@@ -177,7 +178,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
       } else {
         setCrateSpinning(false);
         setOpeningCrate(null);
-        alert(data.reason || 'Open crate failed');
+        alert(data?.reason || 'Open crate failed');
       }
     } catch (e) {
       setCrateSpinning(false);
@@ -186,12 +187,17 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
     }
   };
 
-  const currentWeaponId = profile.equippedWeaponId || 'vanguard_rifle';
+  const currentWeaponId = profile?.equippedWeaponId || 'vanguard_rifle';
   const currentWeapon = VANGUARD_WEAPONS[currentWeaponId] || VANGUARD_WEAPONS.vanguard_rifle;
-  const currentSkinId = equippedSkins[currentWeaponId] || `skin_${currentWeaponId.replace('vanguard_', '')}_default`;
-  const kdRatio = profile.deaths > 0 ? (profile.kills / profile.deaths).toFixed(2) : profile.kills.toFixed(2);
-  const winRate = profile.matches > 0 ? Math.round((profile.wins / profile.matches) * 100) : 0;
-  const xpInCurrentLevel = profile.xp % 1000;
+  const currentSkinId = (equippedSkins && equippedSkins[currentWeaponId]) || `skin_${(currentWeaponId || '').replace('vanguard_', '')}_default`;
+  const pKills = profile?.kills ?? 0;
+  const pDeaths = profile?.deaths ?? 0;
+  const kdRatio = pDeaths > 0 ? (pKills / pDeaths).toFixed(2) : pKills.toFixed(2);
+  const pMatches = profile?.matches ?? 0;
+  const pWins = profile?.wins ?? 0;
+  const winRate = pMatches > 0 ? Math.round((pWins / pMatches) * 100) : 0;
+  const pXp = profile?.xp ?? 0;
+  const xpInCurrentLevel = pXp % 1000;
   const xpPercent = Math.round((xpInCurrentLevel / 1000) * 100);
 
   const handleCopyPartyCode = () => {
@@ -543,15 +549,15 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
               </div>
               <div>
                 <div className="text-slate-500 uppercase">MVP Commendations</div>
-                <div className="text-xl font-bold text-cyan-400 mt-1">{profile.mvps}</div>
+                <div className="text-xl font-bold text-cyan-400 mt-1">{profile?.mvps ?? 0}</div>
               </div>
               <div>
                 <div className="text-slate-500 uppercase">Tactical Assists</div>
-                <div className="text-xl font-bold text-slate-200 mt-1">{profile.assists}</div>
+                <div className="text-xl font-bold text-slate-200 mt-1">{profile?.assists ?? 0}</div>
               </div>
               <div>
                 <div className="text-slate-500 uppercase">Combat Hours</div>
-                <div className="text-xl font-bold text-slate-200 mt-1">{(profile.playTimeMinutes / 60).toFixed(1)}h</div>
+                <div className="text-xl font-bold text-slate-200 mt-1">{(((profile?.playTimeMinutes ?? 0) / 60)).toFixed(1)}h</div>
               </div>
             </div>
           </div>
@@ -574,8 +580,8 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
             {/* Weapon Arsenal Grid */}
             <div className="grid grid-cols-2 gap-6 mb-8">
               {Object.values(VANGUARD_WEAPONS).map((w) => {
-                const isEquipped = profile.equippedWeaponId === w.id;
-                const equippedSkinId = equippedSkins[w.id] || `skin_${w.id.replace('vanguard_', '')}_default`;
+                const isEquipped = profile?.equippedWeaponId === w.id;
+                const equippedSkinId = (equippedSkins && equippedSkins[w.id]) || `skin_${(w.id || '').replace('vanguard_', '')}_default`;
                 const equippedSkin = VANGUARD_SKINS[equippedSkinId] || VANGUARD_SKINS.skin_ar4_default;
                 const ownedSkinsForWeapon = inventory.filter(
                   (i) => i.itemType === 'SKIN' && i.weaponId === w.id && i.skinId
@@ -877,7 +883,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
             </h2>
 
             <div className="space-y-3">
-              {matchHistory.map((m) => {
+              {(Array.isArray(matchHistory) ? matchHistory : []).map((m) => {
                 const isWin = m.result === 'VICTORY';
                 return (
                   <div

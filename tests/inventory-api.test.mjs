@@ -81,5 +81,24 @@ describe('Vanguard API — Inventory Endpoint Integration Test', () => {
     // and the session endpoint generates 'player_vanguard_01'.
     assert.ok(data.success);
   });
+
+  it('should authenticate with Bearer session token header when cookies are disabled in iframe', async () => {
+    // 1. Establish session and retrieve token
+    const authRes = await fetch('http://localhost:49123/api/auth/session');
+    assert.strictEqual(authRes.status, 200);
+    const authData = await authRes.json();
+    assert.ok(authData.token, 'Server must return session token for header auth');
+
+    // 2. Request inventory with Bearer header without any cookies
+    const res = await fetch('http://localhost:49123/api/inventory', {
+      headers: {
+        'Authorization': `Bearer ${authData.token}`
+      }
+    });
+    assert.strictEqual(res.status, 200, 'Endpoint should return HTTP status 200 with Bearer token');
+    const data = await res.json();
+    assert.strictEqual(data.success, true);
+    assert.ok(Array.isArray(data.inventory));
+  });
 });
 

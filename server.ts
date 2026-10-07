@@ -91,8 +91,10 @@ app.get('/api/map/vanguard_parking', (_req, res) => {
 });
 
 function getPlayerIdFromSession(req: any): string | null {
-  const token = req.cookies?.session_token;
-  if (token) {
+  const authHeader = req.headers?.authorization;
+  const bearerToken = authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const token = req.cookies?.session_token || req.headers?.['x-session-token'] || bearerToken;
+  if (token && typeof token === 'string') {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const session = sessions.get(tokenHash);
     if (session && session.expiresAt > Date.now()) {
@@ -104,9 +106,13 @@ function getPlayerIdFromSession(req: any): string | null {
 
 // Session Authentication & Token Handlers
 app.get('/api/auth/session', (req: any, res) => {
-  const token = req.cookies?.session_token;
+  const authHeader = req.headers?.authorization;
+  const bearerToken = authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const token = req.cookies?.session_token || req.headers?.['x-session-token'] || bearerToken;
   let session: Session | undefined;
-  if (token) {
+  let activeToken = token;
+
+  if (token && typeof token === 'string') {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     session = sessions.get(tokenHash);
     if (session && session.expiresAt < Date.now()) {
@@ -117,6 +123,7 @@ app.get('/api/auth/session', (req: any, res) => {
 
   if (!session) {
     const newToken = crypto.randomUUID();
+    activeToken = newToken;
     const tokenHash = crypto.createHash('sha256').update(newToken).digest('hex');
     const newPlayerId = 'player_vanguard_01';
     session = {
@@ -125,12 +132,13 @@ app.get('/api/auth/session', (req: any, res) => {
       expiresAt: Date.now() + 24 * 3600 * 1000,
     };
     sessions.set(tokenHash, session);
-    res.setHeader('Set-Cookie', `session_token=${newToken}; HttpOnly; Max-Age=86400; Path=/; SameSite=Strict`);
+    res.setHeader('Set-Cookie', `session_token=${newToken}; HttpOnly; Max-Age=86400; Path=/; SameSite=None; Secure`);
   }
 
   res.json({
     success: true,
     playerId: session.playerId,
+    token: activeToken,
   });
 });
 

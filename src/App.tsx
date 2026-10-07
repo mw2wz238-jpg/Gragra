@@ -15,6 +15,7 @@ import { getMapDefinition } from './maps/index.ts';
 import { AppStateMachine } from './shared/state-machine.ts';
 import { AppPhase, GameMode, MatchHistoryEntry, MatchSessionInfo, PlayerProfile } from './shared/types.ts';
 import { VCDSManager } from './vcds/client.ts';
+import { authFetch, setSessionToken } from './shared/auth-client.ts';
 
 export default function App() {
   const [phase, setPhase] = useState<AppPhase>('BOOT');
@@ -61,29 +62,44 @@ export default function App() {
   // Initial Boot & Profile Fetch
   useEffect(() => {
     // 1. Fetch server session token & resolve playerId
-    fetch('/api/auth/session')
+    authFetch('/api/auth/session')
       .then((r) => r.json())
       .then((sessionData) => {
-        const activePlayerId = sessionData.playerId || 'player_vanguard_01';
+        if (sessionData && sessionData.token) {
+          setSessionToken(sessionData.token);
+        }
+        const activePlayerId = sessionData?.playerId || 'player_vanguard_01';
         setProfile((prev) => ({ ...prev, id: activePlayerId }));
 
         // 2. Fetch server profile & match history with established session
-        fetch(`/api/profile?playerId=${activePlayerId}`)
+        authFetch(`/api/profile?playerId=${activePlayerId}`)
           .then((r) => r.json())
-          .then((data) => setProfile(data))
+          .then((data) => {
+            if (data && !data.error && data.id) {
+              setProfile(data);
+            }
+          })
           .catch((e) => console.warn('Using offline profile', e));
 
-        fetch(`/api/match-history?playerId=${activePlayerId}`)
+        authFetch(`/api/match-history?playerId=${activePlayerId}`)
           .then((r) => r.json())
-          .then((data) => setMatchHistory(data))
+          .then((data) => {
+            if (Array.isArray(data)) {
+              setMatchHistory(data);
+            }
+          })
           .catch((e) => console.warn('Using offline history', e));
       })
       .catch((err) => {
         console.warn('Failed to fetch auth session, using default', err);
         // Fallback profile
-        fetch('/api/profile?playerId=player_vanguard_01')
+        authFetch('/api/profile?playerId=player_vanguard_01')
           .then((r) => r.json())
-          .then((data) => setProfile(data))
+          .then((data) => {
+            if (data && !data.error && data.id) {
+              setProfile(data);
+            }
+          })
           .catch((e) => console.warn('Using offline profile', e));
       });
 
@@ -105,14 +121,16 @@ export default function App() {
     let hasTransitioned = false;
 
     const pollInterval = setInterval(() => {
-      fetch(`/api/matchmaking/status?playerId=${profile.id}`)
+      authFetch(`/api/matchmaking/status?playerId=${profile.id}`)
         .then((r) => r.json())
         .then((data) => {
-          setPlayersInQueue(data.playersInQueue || 7);
-          if (data.match && !hasTransitioned) {
-            hasTransitioned = true;
-            setActiveMatch(data.match);
-            transitionTo('MATCH_FOUND');
+          if (data) {
+            setPlayersInQueue(data.playersInQueue || 7);
+            if (data.match && !hasTransitioned) {
+              hasTransitioned = true;
+              setActiveMatch(data.match);
+              transitionTo('MATCH_FOUND');
+            }
           }
         })
         .catch(() => {});
@@ -135,7 +153,7 @@ export default function App() {
   const handleStartMatchmaking = (mode: GameMode, mapId = 'industrial_zone') => {
     setActiveQueueMode(mode);
     setActiveQueueMap(mapId);
-    fetch('/api/matchmaking/queue', {
+    authFetch('/api/matchmaking/queue', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -151,7 +169,7 @@ export default function App() {
   };
 
   const handleCancelMatchmaking = () => {
-    fetch('/api/matchmaking/cancel', {
+    authFetch('/api/matchmaking/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerId: profile.id }),
@@ -161,26 +179,30 @@ export default function App() {
   };
 
   const handleUpdateWeapon = (weaponId: string) => {
-    fetch('/api/profile/update', {
+    authFetch('/api/profile/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerId: profile.id, equippedWeaponId: weaponId }),
     })
       .then((r) => r.json())
-      .then((data) => setProfile(data))
+      .then((data) => {
+        if (data && !data.error && data.id) setProfile(data);
+      })
       .catch(() => {
         setProfile((p) => ({ ...p, equippedWeaponId: weaponId }));
       });
   };
 
   const handleUpdateUsername = (newName: string) => {
-    fetch('/api/profile/update', {
+    authFetch('/api/profile/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ playerId: profile.id, username: newName }),
     })
       .then((r) => r.json())
-      .then((data) => setProfile(data))
+      .then((data) => {
+        if (data && !data.error && data.id) setProfile(data);
+      })
       .catch(() => {
         setProfile((p) => ({ ...p, username: newName }));
       });
@@ -286,14 +308,18 @@ export default function App() {
           durationSeconds={matchEndSummary?.durationSeconds || 600}
           onReturnToLobby={() => {
             // Refresh updated profile from server
-            fetch(`/api/profile?playerId=${profile.id}`)
+            authFetch(`/api/profile?playerId=${profile.id}`)
               .then((r) => r.json())
-              .then((data) => setProfile(data))
+              .then((data) => {
+                if (data && !data.error && data.id) setProfile(data);
+              })
               .catch(() => {});
 
-            fetch(`/api/match-history?playerId=${profile.id}`)
+            authFetch(`/api/match-history?playerId=${profile.id}`)
               .then((r) => r.json())
-              .then((data) => setMatchHistory(data))
+              .then((data) => {
+                if (Array.isArray(data)) setMatchHistory(data);
+              })
               .catch(() => {});
 
             transitionTo('LOBBY');

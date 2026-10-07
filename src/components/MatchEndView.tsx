@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { tacticalAudio } from '../audio/tactical-audio.ts';
 import { MatchEndSettlementResponse } from '../shared/types.ts';
+import { authFetch } from '../shared/auth-client.ts';
 
 interface MatchEndViewProps {
   matchId: string;
@@ -45,7 +46,7 @@ export const MatchEndView: React.FC<MatchEndViewProps> = ({
     // Call server settlement with idempotency key
     const idempotencyKey = `settle_${matchId}_${playerId}`;
 
-    fetch(`/api/match/${matchId}/settle`, {
+    authFetch(`/api/match/${matchId}/settle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
