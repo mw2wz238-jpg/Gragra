@@ -88,6 +88,26 @@ export class RoundStateMachine {
     return { alpha: this.teamAlphaScore, omega: this.teamOmegaScore };
   }
 
+  public getMaxRounds(): number {
+    return this.maxRounds;
+  }
+
+  public getTargetWins(): number {
+    return this.targetWins;
+  }
+
+  public getHalftimeRound(): number {
+    return Math.floor(this.maxRounds / 2);
+  }
+
+  public isSecondHalf(): boolean {
+    return this.roundNumber > Math.floor(this.maxRounds / 2);
+  }
+
+  public isHalftimeRound(): boolean {
+    return this.roundNumber === Math.floor(this.maxRounds / 2) + 1;
+  }
+
   public isMatchOver(): boolean {
     return (
       this.teamAlphaScore >= this.targetWins ||

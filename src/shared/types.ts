@@ -48,6 +48,7 @@ export interface GameSnapshot {
   droppedWeapons: any[];
   lossStreaks: { alpha: number; omega: number };
   lastRoundResult?: RoundEndResult;
+  attackingTeam?: 'alpha' | 'omega';
 }
 
 export interface WeaponDef {

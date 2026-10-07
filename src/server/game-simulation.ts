@@ -101,6 +101,19 @@ export class GameSimulation {
   public getLastRoundResult(): { winner: 'alpha' | 'omega'; reason: string } | null {
     return this.lastRoundResult ? { ...this.lastRoundResult } : null;
   }
+
+  public getAttackingTeam(round = this.roundSM.getRoundNumber()): 'alpha' | 'omega' {
+    const halftimeRound = Math.floor(this.roundSM.getMaxRounds() / 2);
+    return round > halftimeRound ? 'omega' : 'alpha';
+  }
+
+  public getDefendingTeam(round = this.roundSM.getRoundNumber()): 'alpha' | 'omega' {
+    return this.getAttackingTeam(round) === 'alpha' ? 'omega' : 'alpha';
+  }
+
+  public getTeamRole(team: 'alpha' | 'omega', round = this.roundSM.getRoundNumber()): 'attackers' | 'defenders' {
+    return team === this.getAttackingTeam(round) ? 'attackers' : 'defenders';
+  }
   
   public onStateBroadcast(cb: (snapshot: any) => void): () => void {
     this.onStateBroadcastListeners.push(cb);
@@ -158,7 +171,8 @@ export class GameSimulation {
     for (const p of playersList) {
       this.economy.initPlayer(p.id);
       const defaultWeapon = VANGUARD_WEAPONS.vanguard_rifle;
-      const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+      const isAttacker = p.team === this.getAttackingTeam();
+      const spawns = isAttacker ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
       const idx = p.team === 'alpha' ? alphaIdx++ : omegaIdx++;
       const s = spawns[idx % spawns.length];
       const initialPos: [number, number, number] = [
@@ -316,7 +330,7 @@ export class GameSimulation {
       const elapsedBombTime = (Date.now() - this.bombState.plantedAt) / 1000;
       if (elapsedBombTime >= 40) {
         this.bombState.isExploded = true;
-        this.endRound('alpha', 'Bomb detonated');
+        this.endRound(this.getAttackingTeam(), 'Bomb detonated');
         return;
       }
     }
@@ -328,7 +342,7 @@ export class GameSimulation {
         this.phaseTimeRemainingSec = 105; // 1m45s combat live phase
       } else if (currentPhase === 'LIVE') {
         // Defenders win if time expires without bomb detonating
-        this.endRound('omega', 'Time expired');
+        this.endRound(this.getDefendingTeam(), 'Time expired');
       } else if (currentPhase === 'ROUND_END') {
         this.roundSM.advancePhase();
         this.phaseTimeRemainingSec = 5; // 5s rewards settlement
@@ -351,11 +365,16 @@ export class GameSimulation {
     if (currentPhase === 'LIVE' && !this.bombState.isPlanted) {
       const alphaAlive = Array.from(this.players.values()).filter(p => p.team === 'alpha' && p.isAlive).length;
       const omegaAlive = Array.from(this.players.values()).filter(p => p.team === 'omega' && p.isAlive).length;
+      const attackingTeam = this.getAttackingTeam();
 
       if (alphaAlive === 0 && omegaAlive > 0) {
-        this.endRound('omega', 'Attackers eliminated');
+        const winner = 'omega';
+        const reason = attackingTeam === 'alpha' ? 'Attackers eliminated' : 'Defenders eliminated';
+        this.endRound(winner, reason);
       } else if (omegaAlive === 0 && alphaAlive > 0) {
-        this.endRound('alpha', 'Defenders eliminated');
+        const winner = 'alpha';
+        const reason = attackingTeam === 'omega' ? 'Attackers eliminated' : 'Defenders eliminated';
+        this.endRound(winner, reason);
       }
     }
   }
@@ -369,7 +388,8 @@ export class GameSimulation {
 
     // Server-Authoritative Economy Settlement
     const playerRoster = Array.from(this.players.values()).map(p => ({ id: p.id, team: p.team }));
-    this.economy.settleRound(winner, playerRoster, this.bombState.isPlanted);
+    const attackingTeam = this.getAttackingTeam();
+    this.economy.settleRound(winner, playerRoster, this.bombState.isPlanted, attackingTeam);
 
     // Sync updated wallet balances to players
     for (const p of this.players.values()) {
@@ -391,6 +411,13 @@ export class GameSimulation {
     this.droppedWeapons.clear();
     this.grenadeManager.activeGrenades.clear();
 
+    const isHalftimeRound = this.roundSM.isHalftimeRound();
+    if (isHalftimeRound) {
+      this.economy.resetHalftime();
+    }
+
+    const attackingTeam = this.getAttackingTeam();
+
     // Respawn all players at team spawns
     let alphaIdx = 0;
     let omegaIdx = 0;
@@ -405,7 +432,15 @@ export class GameSimulation {
       p.spectatingTargetId = null;
       p.cash = this.economy.getBalance(p.id);
 
-      if (wasAlive) {
+      if (isHalftimeRound) {
+        // HALFTIME: Equipment retention policy is cleared. All players reset to pistol round loadout
+        p.equippedWeaponId = 'vanguard_pistol';
+        const defaultWeapon = VANGUARD_WEAPONS.vanguard_pistol;
+        p.ammoInMag = defaultWeapon.magazineSize;
+        p.reserveAmmo = defaultWeapon.reserveAmmo;
+        p.armor = 0;
+        p.grenades = { he: 0, smoke: 0, flash: 0 };
+      } else if (wasAlive) {
         // SURVIVOR: Retains equipped primary/sidearm weapon, current ammo, and remaining armor
         const weapon = VANGUARD_WEAPONS[p.equippedWeaponId] || VANGUARD_WEAPONS.vanguard_pistol;
         p.ammoInMag = Math.min(Math.max(0, p.ammoInMag), weapon.magazineSize);
@@ -437,7 +472,8 @@ export class GameSimulation {
         }
       }
 
-      const spawns = p.team === 'alpha' ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+      const isAttacker = p.team === attackingTeam;
+      const spawns = isAttacker ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
       const idx = p.team === 'alpha' ? alphaIdx++ : omegaIdx++;
       const s = spawns[idx % spawns.length];
       p.position = [
@@ -885,8 +921,9 @@ export class GameSimulation {
 
   public handlePlantBomb(playerId: string, site: 'bombsite_a' | 'bombsite_b', pos?: [number, number, number]): boolean {
     const player = this.players.get(playerId);
-    // 1. Authoritative player state and team validation (only alive Alpha team attackers can plant)
-    if (!player || !player.isAlive || player.team !== 'alpha') return false;
+    const attackingTeam = this.getAttackingTeam();
+    // 1. Authoritative player state and team validation (only alive attacking team players can plant)
+    if (!player || !player.isAlive || player.team !== attackingTeam) return false;
 
     // 2. Authoritative round phase validation (must be LIVE, bomb must not be already planted)
     if (this.roundSM.getPhase() !== 'LIVE' || this.bombState.isPlanted) return false;
@@ -924,8 +961,9 @@ export class GameSimulation {
 
   public handleDefuseBomb(playerId: string): boolean {
     const player = this.players.get(playerId);
-    // 1. Only alive Omega team defenders can defuse
-    if (!player || !player.isAlive || player.team !== 'omega') return false;
+    const defendingTeam = this.getDefendingTeam();
+    // 1. Only alive defending team players can defuse
+    if (!player || !player.isAlive || player.team !== defendingTeam) return false;
 
     // 2. Bomb must be active and not defused/exploded
     if (!this.bombState.isPlanted || this.bombState.isDefused || this.bombState.isExploded || !this.bombState.position) {
@@ -943,7 +981,7 @@ export class GameSimulation {
 
     this.bombState.isDefused = true;
     this.bombState.defusedBy = player.id;
-    this.endRound('omega', 'Bomb defused');
+    this.endRound(defendingTeam, 'Bomb defused');
     return true;
   }
 
@@ -952,15 +990,17 @@ export class GameSimulation {
 
     const siteA = this.mapDefinition.objectives[0]?.position || [16, 0.5, -16];
     const siteB = this.mapDefinition.objectives[1]?.position || [-16, 0.5, 16];
+    const attackingTeam = this.getAttackingTeam();
 
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.isAlive) continue;
 
+      const isBotAttacker = bot.team === attackingTeam;
       let targetPos: [number, number, number];
 
       if (this.bombState.isPlanted && this.bombState.position) {
         // Bomb is planted:
-        if (bot.team === 'omega') {
+        if (!isBotAttacker) {
           // Defenders rush to defuse the bomb
           targetPos = this.bombState.position;
           const bdx = targetPos[0] - bot.position[0];
@@ -985,7 +1025,7 @@ export class GameSimulation {
         const assignedSite = botNum % 2 === 1 ? siteA : siteB;
         targetPos = assignedSite;
 
-        if (bot.team === 'alpha') {
+        if (isBotAttacker) {
           const adx = targetPos[0] - bot.position[0];
           const adz = targetPos[2] - bot.position[2];
           const distToSite = Math.sqrt(adx * adx + adz * adz);
@@ -1100,6 +1140,7 @@ export class GameSimulation {
       droppedWeapons: Array.from(this.droppedWeapons.values()),
       lossStreaks: this.economy.getLossStreaks(),
       lastRoundResult: this.lastRoundResult || undefined,
+      attackingTeam: this.getAttackingTeam(),
     };
 
     for (const listener of this.onStateBroadcastListeners) {

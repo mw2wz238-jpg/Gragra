@@ -106,12 +106,24 @@ export class VanguardEconomy {
   }
 
   /**
+   * Reset economy state at halftime (Section 12 / Etap 4)
+   * All wallets reset to starting cash, loss streaks reset to 0
+   */
+  public resetHalftime(): void {
+    for (const id of this.playerWallets.keys()) {
+      this.playerWallets.set(id, this.startingCash);
+    }
+    this.teamLossStreaks = { alpha: 0, omega: 0 };
+  }
+
+  /**
    * Settle round rewards for both teams
    */
   public settleRound(
     winnerTeam: 'alpha' | 'omega',
     allPlayers: Array<{ id: string; team: 'alpha' | 'omega' }>,
-    bombPlantedByAlpha = false
+    bombPlantedByLossTeam = false,
+    plantingTeam?: 'alpha' | 'omega'
   ): { alphaReward: number; omegaReward: number; alphaStreak: number; omegaStreak: number } {
     let alphaReward = 0;
     let omegaReward = 0;
@@ -124,6 +136,11 @@ export class VanguardEconomy {
       alphaReward = 3250;
       // Omega loss scaling: $1400, $1900, $2400, $2900, $3400
       omegaReward = 1400 + (this.teamLossStreaks.omega - 1) * 500;
+
+      // Bonus $300 for Omega if they managed to plant the bomb despite losing
+      if (bombPlantedByLossTeam && plantingTeam === 'omega') {
+        omegaReward += 300;
+      }
     } else {
       // Omega won: reset loss streak, award $3250
       this.teamLossStreaks.omega = 0;
@@ -133,7 +150,7 @@ export class VanguardEconomy {
       alphaReward = 1400 + (this.teamLossStreaks.alpha - 1) * 500;
 
       // Bonus $300 for Alpha if they managed to plant the bomb despite losing
-      if (bombPlantedByAlpha) {
+      if (bombPlantedByLossTeam && (!plantingTeam || plantingTeam === 'alpha')) {
         alphaReward += 300;
       }
     }

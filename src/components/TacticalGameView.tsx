@@ -102,6 +102,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   const [spectatorTargetName, setSpectatorTargetName] = useState<string>('Teammate');
   const [spectatorTargetHp, setSpectatorTargetHp] = useState<number>(100);
   const [lastRoundResult, setLastRoundResult] = useState<RoundEndResult | null>(null);
+  const [attackingTeam, setAttackingTeam] = useState<'alpha' | 'omega'>('alpha');
 
   // Nearby Dropped Weapon for pickup
   const [nearbyDroppedWeapon, setNearbyDroppedWeapon] = useState<DroppedWeaponEntity | null>(null);
@@ -896,6 +897,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           if (snap.lastRoundResult) {
             setLastRoundResult(snap.lastRoundResult);
           }
+          if (snap.attackingTeam) {
+            setAttackingTeam(snap.attackingTeam);
+          }
 
           // Update local player state
           const me = snap.players.find((p: any) => p.id === playerId);
@@ -1195,8 +1199,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           setInBombsite(null);
         }
 
-        // Bomb Planting
-        if (keysPressed['KeyE'] && inBombsiteRef.current && assignedTeam === 'alpha' && !bombPlantedRef.current && roundPhaseRef.current === 'LIVE') {
+        // Bomb Planting & Defusing
+        const isAttacker = assignedTeam === (attackingTeam || (roundNumber > 12 ? 'omega' : 'alpha'));
+        if (keysPressed['KeyE'] && inBombsiteRef.current && isAttacker && !bombPlantedRef.current && roundPhaseRef.current === 'LIVE') {
           setIsPlanting(true);
           isPlantingRef.current = true;
           setPlantProgress((p) => {
@@ -1220,6 +1225,39 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           setIsPlanting(false);
           isPlantingRef.current = false;
           setPlantProgress(0);
+        }
+
+        // Bomb Defusing
+        if (keysPressed['KeyE'] && bombPlantedRef.current && bombPositionRef.current && !isAttacker && roundPhaseRef.current === 'LIVE') {
+          const bPos = bombPositionRef.current;
+          const distToBomb = Math.hypot(camera.position.x - bPos[0], camera.position.z - bPos[2]);
+          if (distToBomb <= 4.0) {
+            setIsDefusing(true);
+            isDefusingRef.current = true;
+            setDefuseProgress((p) => {
+              const next = p + delta * 20; // 5s defuse time
+              if (next >= 100) {
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(
+                    JSON.stringify({
+                      type: 'DEFUSE_BOMB',
+                      playerId,
+                    })
+                  );
+                }
+                return 0;
+              }
+              return next;
+            });
+          } else {
+            setIsDefusing(false);
+            isDefusingRef.current = false;
+            setDefuseProgress(0);
+          }
+        } else {
+          setIsDefusing(false);
+          isDefusingRef.current = false;
+          setDefuseProgress(0);
         }
 
         // First-Person Weapon Animations: Recoil, Bobbing & 4-Stage Reload Sequence
@@ -1721,6 +1759,22 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
             </span>
             <span className="text-slate-500">•</span>
             <span className="text-slate-300 font-semibold">{lastRoundResult.reason}</span>
+          </div>
+        </div>
+      )}
+
+      {/* HALFTIME / SIDE SWAP BANNER */}
+      {roundNumber === 13 && roundPhase === 'BUY' && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 px-8 py-4 bg-black/90 backdrop-blur-xl rounded-2xl border border-amber-500/50 shadow-[0_0_30px_rgba(245,158,11,0.3)] z-30 pointer-events-none animate-bounce">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_#f59e0b] animate-ping" />
+            <span className="text-2xl font-black font-['Chakra_Petch'] tracking-widest uppercase text-amber-400">
+              HALFTIME — SWITCHING SIDES
+            </span>
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_#f59e0b] animate-ping" />
+          </div>
+          <div className="text-xs font-mono text-slate-300">
+            {assignedTeam === 'alpha' ? 'Team Alpha is now DEFENDING' : 'Team Omega is now ATTACKING'}
           </div>
         </div>
       )}
