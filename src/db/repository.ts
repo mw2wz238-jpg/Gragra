@@ -17,7 +17,7 @@ export class VanguardRepository {
    * Get or create a player profile.
    * If the user doesn't exist, it creates both user and profile records.
    */
-  public async getOrCreateProfile(playerId: string, username: string): Promise<PlayerProfile> {
+  public async getOrCreateProfile(playerId: string, username = 'Vanguard_Operator'): Promise<PlayerProfile> {
     if (!isDatabaseAvailable) {
       let prof = this.memProfiles.get(playerId);
       const currentCoins = this.memWallets.get(playerId) ?? 0;
@@ -224,6 +224,220 @@ export class VanguardRepository {
         xpEarned: row.xp_earned,
         durationSeconds: row.duration_seconds
       }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Settle match rewards, update profile, and insert match history atomically in a single PostgreSQL transaction.
+   * If any step fails, the entire transaction is rolled back.
+   */
+  public async settleMatchAtomic(params: {
+    playerId: string;
+    matchId: string;
+    idempotencyKey: string;
+    profileUpdates: Partial<PlayerProfile>;
+    historyEntry: Omit<MatchHistoryEntry, 'timestamp'>;
+    walletCredit: number;
+  }): Promise<{ success: boolean; idempotent: boolean; walletBalanceAfter: number }> {
+    const { playerId, matchId, idempotencyKey, profileUpdates, historyEntry, walletCredit } = params;
+
+    if (!isDatabaseAvailable) {
+      // In-memory fallback (DEV/TEST ONLY)
+      const existingTx = this.memLedger.get(idempotencyKey);
+      if (existingTx) {
+        return {
+          success: true,
+          idempotent: true,
+          walletBalanceAfter: existingTx.balanceAfter,
+        };
+      }
+
+      const hist = this.memMatchHistory.get(playerId) || [];
+      const matchExists = hist.some((h) => h.id === matchId);
+      if (matchExists) {
+        return {
+          success: true,
+          idempotent: true,
+          walletBalanceAfter: this.memWallets.get(playerId) ?? 0,
+        };
+      }
+
+      // Snapshot for rollback in case of error
+      const profBefore = this.memProfiles.get(playerId);
+      const walletBefore = this.memWallets.get(playerId) ?? 0;
+      const histBefore = [...hist];
+
+      try {
+        if (profBefore) {
+          this.memProfiles.set(playerId, { ...profBefore, ...profileUpdates });
+        }
+        hist.unshift({ ...historyEntry, timestamp: Date.now() });
+        this.memMatchHistory.set(playerId, hist);
+
+        const newBalance = walletBefore + walletCredit;
+        this.memWallets.set(playerId, newBalance);
+
+        const entry: WalletLedgerEntry = {
+          transactionId: `tx_mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          playerId,
+          type: 'CREDIT',
+          amount: walletCredit,
+          source: 'MATCH_REWARD',
+          timestamp: Date.now(),
+          idempotencyKey,
+          balanceAfter: newBalance,
+        };
+        this.memLedger.set(idempotencyKey, entry);
+
+        return {
+          success: true,
+          idempotent: false,
+          walletBalanceAfter: newBalance,
+        };
+      } catch (err) {
+        // Rollback memory
+        if (profBefore) this.memProfiles.set(playerId, profBefore);
+        this.memWallets.set(playerId, walletBefore);
+        this.memMatchHistory.set(playerId, histBefore);
+        throw err;
+      }
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Ensure user, profile, and wallet exist
+      await client.query(
+        'INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+        [playerId, 'Vanguard_Operator']
+      );
+      await client.query(
+        'INSERT INTO profiles (player_id) VALUES ($1) ON CONFLICT (player_id) DO NOTHING',
+        [playerId]
+      );
+      await client.query(
+        'INSERT INTO wallets (player_id, balance) VALUES ($1, 0) ON CONFLICT (player_id) DO NOTHING',
+        [playerId]
+      );
+
+      // 2. Idempotency checks
+      const idempRes = await client.query(
+        'SELECT id, balance_after FROM wallet_ledger WHERE idempotency_key = $1',
+        [idempotencyKey]
+      );
+      if (idempRes.rows.length > 0) {
+        await client.query('COMMIT');
+        return {
+          success: true,
+          idempotent: true,
+          walletBalanceAfter: parseInt(idempRes.rows[0].balance_after, 10),
+        };
+      }
+
+      const histRes = await client.query(
+        'SELECT id FROM match_history WHERE player_id = $1 AND match_id = $2',
+        [playerId, matchId]
+      );
+      if (histRes.rows.length > 0) {
+        const wRes = await client.query('SELECT balance FROM wallets WHERE player_id = $1', [playerId]);
+        await client.query('COMMIT');
+        return {
+          success: true,
+          idempotent: true,
+          walletBalanceAfter: parseInt(wRes.rows[0]?.balance || 0, 10),
+        };
+      }
+
+      // 3. Lock wallet row FOR UPDATE
+      const walletRes = await client.query(
+        'SELECT balance FROM wallets WHERE player_id = $1 FOR UPDATE',
+        [playerId]
+      );
+      const currentBalance = parseInt(walletRes.rows[0]?.balance || 0, 10);
+      const newBalance = currentBalance + walletCredit;
+
+      // 4. Update profile stats
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let idx = 1;
+      const columnMapping: Record<string, string> = {
+        level: 'level',
+        xp: 'xp',
+        rating: 'rating',
+        rank: 'rank',
+        matches: 'matches',
+        wins: 'wins',
+        losses: 'losses',
+        kills: 'kills',
+        deaths: 'deaths',
+        assists: 'assists',
+        headshots: 'headshots',
+        mvps: 'mvps',
+        playTimeMinutes: 'play_time_minutes',
+        equippedWeaponId: 'equipped_weapon_id',
+      };
+      for (const [key, value] of Object.entries(profileUpdates)) {
+        if (columnMapping[key]) {
+          setClauses.push(`${columnMapping[key]} = $${idx}`);
+          values.push(value);
+          idx++;
+        }
+      }
+      if (setClauses.length > 0) {
+        values.push(playerId);
+        await client.query(
+          `UPDATE profiles SET ${setClauses.join(', ')} WHERE player_id = $${idx}`,
+          values
+        );
+      }
+
+      // 5. Insert match history
+      await client.query(
+        `INSERT INTO match_history (
+          player_id, match_id, mode, map_id, result, score, 
+          kills, deaths, assists, headshots, 
+          rating_change, xp_earned, duration_seconds
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (player_id, match_id) DO NOTHING`,
+        [
+          playerId,
+          matchId,
+          historyEntry.mode,
+          historyEntry.mapId,
+          historyEntry.result,
+          historyEntry.score,
+          historyEntry.kills,
+          historyEntry.deaths,
+          historyEntry.assists,
+          historyEntry.headshots,
+          historyEntry.ratingChange,
+          historyEntry.xpEarned,
+          historyEntry.durationSeconds,
+        ]
+      );
+
+      // 6. Update wallet balance
+      await client.query('UPDATE wallets SET balance = $1 WHERE player_id = $2', [newBalance, playerId]);
+
+      // 7. Insert wallet ledger entry
+      await client.query(
+        `INSERT INTO wallet_ledger (player_id, type, amount, source, idempotency_key, balance_after)
+         VALUES ($1, 'CREDIT', $2, 'MATCH_REWARD', $3, $4)`,
+        [playerId, walletCredit, idempotencyKey, newBalance]
+      );
+
+      await client.query('COMMIT');
+      return {
+        success: true,
+        idempotent: false,
+        walletBalanceAfter: newBalance,
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
     } finally {
       client.release();
     }

@@ -160,13 +160,7 @@ export class SettlementService {
         const newLevel = Math.floor(updatedStats.xp / 1000) + 1;
         const newRank = this.getRankTitle(updatedStats.rating);
 
-        // 4. Persistence: Update Profile & Save Match History
-        await vanguardRepository.updateProfile(req.playerId, {
-          ...updatedStats,
-          level: newLevel,
-          rank: newRank
-        });
-
+        // 4. Persistence: Atomic Profile, Match History & Wallet Settlement in a single PostgreSQL transaction
         const historyEntry: Omit<MatchHistoryEntry, 'timestamp'> = {
           id: req.matchId,
           mode: 'COMPETITIVE',
@@ -183,26 +177,28 @@ export class SettlementService {
           durationSeconds: req.durationSeconds,
         };
 
-        await vanguardRepository.saveMatchHistory(req.playerId, historyEntry);
-
-        // 5. Authoritative Match Rewards: Persistent modifyWallet with ACID & Idempotency
-        const walletRewardResult = await vanguardRepository.modifyWallet(
-          req.playerId,
-          matchCredits,
-          'CREDIT',
-          'MATCH_REWARD',
-          `${req.matchId}_credits_${req.playerId}`
-        );
+        const atomicResult = await vanguardRepository.settleMatchAtomic({
+          playerId: req.playerId,
+          matchId: req.matchId,
+          idempotencyKey,
+          profileUpdates: {
+            ...updatedStats,
+            level: newLevel,
+            rank: newRank,
+          },
+          historyEntry,
+          walletCredit: matchCredits,
+        });
 
         const response: MatchEndSettlementResponse = {
           success: true,
-          idempotent: false,
+          idempotent: atomicResult.idempotent,
           ratingBefore,
           ratingAfter,
           ratingChange: ratingDelta,
           xpEarned: totalXp,
           coinsEarned: matchCredits,
-          walletBalanceAfter: walletRewardResult.balanceAfter,
+          walletBalanceAfter: atomicResult.walletBalanceAfter,
           newLevel,
           newRank,
           updatedStats: {

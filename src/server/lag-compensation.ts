@@ -87,9 +87,9 @@ export class LagCompensationBuffer {
     const list = this.history.get(playerId);
     if (!list || list.length === 0) return null;
 
-    // Strict security clamp: cannot rewind more than MAX_REWIND_MS into the past
+    // Strict security clamp: cannot rewind more than MAX_REWIND_MS into the past, and cannot rewind into future
     const earliestAllowed = currentServerTime - LagCompensationBuffer.MAX_REWIND_MS;
-    const clampedTimestamp = Math.max(requestedTimestamp, earliestAllowed);
+    const clampedTimestamp = Math.min(currentServerTime, Math.max(requestedTimestamp, earliestAllowed));
 
     // If requested time is after latest snapshot, return latest
     const latest = list[list.length - 1];

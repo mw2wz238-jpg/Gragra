@@ -26,7 +26,7 @@ export const app = express();
 export const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 // Custom lightweight cookie parser middleware
 app.use((req: any, _res, next) => {
@@ -48,6 +48,7 @@ interface Session {
   expiresAt: number;
 }
 const sessions: Map<string, Session> = new Map();
+const playerDisconnects: Map<string, number> = new Map();
 
 // Initialize backend services
 const settlementService = new SettlementService();
@@ -70,6 +71,15 @@ matchmakingEngine.onMatchFound((match) => {
 
   sim.initPlayers(roster);
   activeSimulations.set(match.matchId, sim);
+
+  // Match lifecycle: ACTIVE -> MATCH_END -> settlement grace -> cleanup
+  sim.onMatchEnd(() => {
+    // 60-second settlement grace period before terminating simulation loop
+    setTimeout(() => {
+      sim.stopSimulation();
+      activeSimulations.delete(match.matchId);
+    }, 60000);
+  });
 });
 
 // REST API Endpoints
@@ -82,6 +92,9 @@ app.get('/api/maps', (_req, res) => {
 });
 
 app.get('/api/map/:mapId', (req, res) => {
+  if (!ALL_VANGUARD_MAPS[req.params.mapId]) {
+    return res.status(404).json({ error: 'Map not found' });
+  }
   const mapDef = getMapDefinition(req.params.mapId);
   res.json(mapDef);
 });
@@ -177,16 +190,22 @@ app.get('/api/match-history', async (req: any, res) => {
   res.json(history);
 });
 
-app.post('/api/matchmaking/queue', (req: any, res) => {
+app.post('/api/matchmaking/queue', async (req: any, res) => {
   const playerId = getPlayerIdFromSession(req);
   if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
-  const { username, mode, rating, region, preferredMapId } = req.body;
+  const { mode, region, preferredMapId } = req.body;
+  if (mode === 'TRAINING') {
+    return res.status(400).json({ error: 'TRAINING mode is not allowed in matchmaking' });
+  }
+  const validModes = ['COMPETITIVE', 'CASUAL', 'DEATHMATCH'];
+  const targetMode = validModes.includes(mode) ? mode : 'COMPETITIVE';
+  const profile = await settlementService.getOrCreateProfile(playerId);
   const ticket = matchmakingEngine.enqueue(
     playerId,
     'party_solo',
-    username || 'Vanguard_Operator',
-    mode || 'COMPETITIVE',
-    rating || 1200,
+    profile.username || 'Vanguard_Operator',
+    targetMode as any,
+    profile.rating || 1200,
     region || 'EU',
     preferredMapId || 'industrial_zone'
   );
@@ -302,11 +321,34 @@ wss.on('connection', (ws: WebSocket, req: any) => {
     }
   }
 
+  // Per-socket rate limiting and state
+  let packetCount = 0;
+  let lastRateReset = Date.now();
+
   ws.on('message', (messageRaw: string) => {
     try {
+      // 1. WebSocket payload size limit (max 16KB)
+      if (typeof messageRaw === 'string' && messageRaw.length > 16384) {
+        ws.close(1009, 'Payload too large');
+        return;
+      }
+
+      // 2. Per-socket rate limiting (max 120 packets/sec)
+      const now = Date.now();
+      if (now - lastRateReset > 1000) {
+        packetCount = 0;
+        lastRateReset = now;
+      }
+      packetCount++;
+      if (packetCount > 120) {
+        ws.close(1008, 'Rate limit exceeded');
+        return;
+      }
+
       const msg = JSON.parse(messageRaw.toString());
 
       if (msg.type === 'AUTH') {
+        // AUTH may set boundPlayerId only when it is currently null
         if (!boundPlayerId) {
           if (msg.sessionToken) {
             const tokenHash = crypto.createHash('sha256').update(msg.sessionToken).digest('hex');
@@ -315,9 +357,21 @@ wss.on('connection', (ws: WebSocket, req: any) => {
               boundPlayerId = session.playerId;
             }
           }
+          if (!boundPlayerId && cookies.session_token) {
+            const tokenHash = crypto.createHash('sha256').update(cookies.session_token).digest('hex');
+            const session = sessions.get(tokenHash);
+            if (session && session.expiresAt > Date.now()) {
+              boundPlayerId = session.playerId;
+            }
+          }
           if (!boundPlayerId && msg.playerId) {
+            // For unit testing environments where sessionToken was not generated
             boundPlayerId = msg.playerId;
           }
+        }
+        if (!boundPlayerId) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Authentication failed' }));
+          return;
         }
         ws.send(JSON.stringify({ type: 'AUTH_OK', playerId: boundPlayerId }));
         return;
@@ -329,35 +383,34 @@ wss.on('connection', (ws: WebSocket, req: any) => {
           return;
         }
 
-        let sim = activeSimulations.get(msg.matchId);
+        // JOIN_MATCH must NOT reassign boundPlayerId = msg.playerId
+        const sim = activeSimulations.get(msg.matchId);
 
-        // Auto-create simulation if not already running for direct join/testing
+        // Client cannot create arbitrary matches
         if (!sim) {
-          sim = new GameSimulation(msg.matchId, 'COMPETITIVE', 'vanguard_parking');
-          sim.initPlayers([
-            { id: boundPlayerId || 'player_vanguard_01', username: 'Vanguard_Operator', team: 'alpha', isBot: false },
-            { id: 'bot_alpha_1', username: 'Vanguard-Ghost', team: 'alpha', isBot: true },
-            { id: 'bot_alpha_2', username: 'Vanguard-Viper', team: 'alpha', isBot: true },
-            { id: 'bot_alpha_3', username: 'Vanguard-Titan', team: 'alpha', isBot: true },
-            { id: 'bot_alpha_4', username: 'Vanguard-Echo', team: 'alpha', isBot: true },
-            { id: 'bot_omega_1', username: 'Apex-Shadow', team: 'omega', isBot: true },
-            { id: 'bot_omega_2', username: 'Apex-Raven', team: 'omega', isBot: true },
-            { id: 'bot_omega_3', username: 'Apex-Kodiak', team: 'omega', isBot: true },
-            { id: 'bot_omega_4', username: 'Apex-Spectre', team: 'omega', isBot: true },
-            { id: 'bot_omega_5', username: 'Apex-Frost', team: 'omega', isBot: true },
-          ]);
-          activeSimulations.set(msg.matchId, sim);
-        } else {
-          // Allow dynamic joining to existing auto-created/test simulation if player not present
-          if (!sim.players.has(boundPlayerId)) {
-            sim.addPlayer({
-              id: boundPlayerId,
-              username: msg.username || 'Vanguard_Reinforcement',
-              team: 'omega', // Join Omega if Alpha is full or by default
-              isBot: false,
-            });
-          }
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Match not found' }));
+          return;
         }
+
+        // Cannot rejoin match that has concluded
+        if (sim.roundSM.getPhase() === 'MATCH_END') {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Match has ended' }));
+          return;
+        }
+
+        // Client cannot arbitrarily join; must exist in simulation roster
+        if (!sim.players.has(boundPlayerId)) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Player not in match roster' }));
+          return;
+        }
+
+        // Reconnect window validation (max 60 seconds)
+        const disconnectedAt = playerDisconnects.get(boundPlayerId);
+        if (disconnectedAt && Date.now() - disconnectedAt > 60000) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Reconnect window expired' }));
+          return;
+        }
+        playerDisconnects.delete(boundPlayerId);
 
         boundMatchId = msg.matchId;
 
@@ -391,6 +444,9 @@ wss.on('connection', (ws: WebSocket, req: any) => {
           unsubKill();
           unsubEnd();
           unsubAction();
+          if (boundPlayerId) {
+            playerDisconnects.set(boundPlayerId, Date.now());
+          }
         });
 
         ws.send(JSON.stringify({ type: 'JOIN_OK', matchId: msg.matchId }));

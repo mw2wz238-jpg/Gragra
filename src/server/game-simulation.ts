@@ -459,26 +459,54 @@ export class GameSimulation {
     const player = this.players.get(playerId);
     if (!player || !player.isAlive) return;
 
+    // 1. Finite numeric validation on coordinates and aim angles
+    if (
+      !pos ||
+      !Array.isArray(pos) ||
+      pos.length < 3 ||
+      !Number.isFinite(pos[0]) ||
+      !Number.isFinite(pos[1]) ||
+      !Number.isFinite(pos[2]) ||
+      !Number.isFinite(rotY) ||
+      !Number.isFinite(pitch)
+    ) {
+      return;
+    }
+
+    const serverNow = Date.now();
     let physics = this.playerPhysics.get(playerId);
-    const now = timestamp || Date.now();
-    
+
     if (!physics) {
       physics = {
         position: [...player.position],
         velocity: [0, 0, 0],
         isGrounded: true,
-        lastTimestamp: now - 50,
+        lastTimestamp: serverNow - 50,
         lastSequence: sequence || 0,
       };
       this.playerPhysics.set(playerId, physics);
     }
 
-    // Rely on validated client-side position to eliminate desync on walls/crates/collisions
-    physics.position = [...pos];
-    physics.lastTimestamp = now;
-    if (sequence !== undefined) {
+    // 2. Sequence monotonicity validation (reject out-of-order/replayed packets)
+    if (sequence !== undefined && Number.isFinite(sequence)) {
+      if (sequence < physics.lastSequence) {
+        return;
+      }
       physics.lastSequence = sequence;
     }
+
+    // 3. Server-side timestamp validation: never trust client time, reject future time beyond network jitter
+    let effectiveTimestamp = serverNow;
+    if (timestamp !== undefined && Number.isFinite(timestamp)) {
+      if (timestamp > serverNow + 200) {
+        return; // Reject future timestamp
+      }
+      effectiveTimestamp = Math.min(timestamp, serverNow);
+    }
+
+    // Rely on validated client-side position to eliminate desync on walls/crates/collisions
+    physics.position = [...pos];
+    physics.lastTimestamp = effectiveTimestamp;
 
     // Map bounds validation (accounting for 2m perimeter wall margin)
     const bMin = this.mapDefinition.bounds.min;
@@ -488,7 +516,7 @@ export class GameSimulation {
     const clampedZ = Math.max(bMin[2] + 2, Math.min(bMax[2] - 2, physics.position[2]));
 
     // Anti-cheat movement validation (speed-hack, fly-hack, teleportation)
-    const moveVal = this.antiCheat.validateMovement(playerId, [clampedX, clampedY, clampedZ], now);
+    const moveVal = this.antiCheat.validateMovement(playerId, [clampedX, clampedY, clampedZ], effectiveTimestamp);
     this.antiCheat.validateAimRotation(playerId, rotY, pitch);
 
     player.position = moveVal.correctedPos;
@@ -550,9 +578,12 @@ export class GameSimulation {
     for (const target of this.players.values()) {
       if (target.id === playerId || target.team === player.team || !target.isAlive) continue;
 
-      // Rewind target to client snapshot time (clamped to max 200ms)
-      const rewound = clientTimestamp
-        ? this.lagComp.getRewoundPosition(target.id, clientTimestamp, now)
+      // Rewind target to client snapshot time (clamped to max 200ms, non-future)
+      const validClientTimestamp = (clientTimestamp !== undefined && Number.isFinite(clientTimestamp))
+        ? Math.min(clientTimestamp, now)
+        : undefined;
+      const rewound = validClientTimestamp
+        ? this.lagComp.getRewoundPosition(target.id, validClientTimestamp, now)
         : null;
       const targetPos = rewound ? rewound.position : target.position;
 
@@ -693,11 +724,48 @@ export class GameSimulation {
     const player = this.players.get(playerId);
     if (!player || !player.isAlive || this.roundSM.getPhase() !== 'LIVE') return false;
 
+    // 1. Grenade type validation
+    const validTypes: GrenadeType[] = ['HE', 'SMOKE', 'FLASH'];
+    if (!type || !validTypes.includes(type)) return false;
+
+    // 2. Finite numeric validation on origin and direction
+    if (
+      !origin ||
+      !Array.isArray(origin) ||
+      origin.length < 3 ||
+      !Number.isFinite(origin[0]) ||
+      !Number.isFinite(origin[1]) ||
+      !Number.isFinite(origin[2]) ||
+      !direction ||
+      !Array.isArray(direction) ||
+      direction.length < 3 ||
+      !Number.isFinite(direction[0]) ||
+      !Number.isFinite(direction[1]) ||
+      !Number.isFinite(direction[2])
+    ) {
+      return false;
+    }
+
+    // 3. Direction normalization and zero vector check
+    const dirLen = Math.sqrt(direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2]);
+    if (dirLen < 0.001) return false;
+    const normDir: [number, number, number] = [direction[0] / dirLen, direction[1] / dirLen, direction[2] / dirLen];
+
+    // 4. Origin proximity validation (origin must be within 3m of authoritative player position)
+    const odx = origin[0] - player.position[0];
+    const ody = origin[1] - player.position[1];
+    const odz = origin[2] - player.position[2];
+    const originDist = Math.sqrt(odx * odx + ody * ody + odz * odz);
+    const validOrigin: [number, number, number] = originDist > 3.0
+      ? [player.position[0], player.position[1] + 1.5, player.position[2]]
+      : origin;
+
+    // 5. Grenade inventory count check
     const gKey = type.toLowerCase() as 'he' | 'smoke' | 'flash';
-    if (player.grenades[gKey] <= 0) return false;
+    if (!player.grenades || player.grenades[gKey] <= 0) return false;
 
     player.grenades[gKey]--;
-    this.grenadeManager.throwGrenade(playerId, type, origin, direction);
+    this.grenadeManager.throwGrenade(playerId, type, validOrigin, normDir);
     return true;
   }
 
@@ -798,16 +866,37 @@ export class GameSimulation {
     }, weapon.reloadTimeSec * 1000);
   }
 
-  public handlePlantBomb(playerId: string, site: 'bombsite_a' | 'bombsite_b', pos: [number, number, number]): boolean {
+  public handlePlantBomb(playerId: string, site: 'bombsite_a' | 'bombsite_b', pos?: [number, number, number]): boolean {
     const player = this.players.get(playerId);
+    // 1. Authoritative player state and team validation (only alive Alpha team attackers can plant)
     if (!player || !player.isAlive || player.team !== 'alpha') return false;
+
+    // 2. Authoritative round phase validation (must be LIVE, bomb must not be already planted)
     if (this.roundSM.getPhase() !== 'LIVE' || this.bombState.isPlanted) return false;
+
+    // 3. Validate objective bombsite definition
+    const siteObj = this.mapDefinition.objectives.find((o) => o.id === site);
+    if (!siteObj) return false;
+
+    // 4. Proximity validation: player must be within bombsite zone radius (with tolerance)
+    if (this.playerPhysics.has(playerId)) {
+      const pDist = Math.hypot(player.position[0] - siteObj.position[0], player.position[2] - siteObj.position[2]);
+      if (pDist > (siteObj.radius || 6) + 3.5) {
+        return false;
+      }
+    }
+
+    // 5. Server-authoritative bomb position locked to bombsite/player ground
+    const bombPos: [number, number, number] =
+      pos && Array.isArray(pos) && Number.isFinite(pos[0]) && Number.isFinite(pos[2])
+        ? [pos[0], siteObj.position[1], pos[2]]
+        : [player.position[0], siteObj.position[1], player.position[2]];
 
     this.bombState = {
       isPlanted: true,
       plantedAt: Date.now(),
       site,
-      position: pos,
+      position: bombPos,
       isDefused: false,
       isExploded: false,
       plantedBy: player.id,
@@ -818,8 +907,22 @@ export class GameSimulation {
 
   public handleDefuseBomb(playerId: string): boolean {
     const player = this.players.get(playerId);
+    // 1. Only alive Omega team defenders can defuse
     if (!player || !player.isAlive || player.team !== 'omega') return false;
-    if (!this.bombState.isPlanted || this.bombState.isDefused || this.bombState.isExploded) return false;
+
+    // 2. Bomb must be active and not defused/exploded
+    if (!this.bombState.isPlanted || this.bombState.isDefused || this.bombState.isExploded || !this.bombState.position) {
+      return false;
+    }
+
+    // 3. Proximity validation: defender must be within defusal distance (6m) of bomb
+    if (this.playerPhysics.has(playerId)) {
+      const bPos = this.bombState.position;
+      const dist = Math.hypot(player.position[0] - bPos[0], player.position[2] - bPos[2]);
+      if (dist > 6.0) {
+        return false;
+      }
+    }
 
     this.bombState.isDefused = true;
     this.bombState.defusedBy = player.id;
