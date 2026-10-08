@@ -1384,6 +1384,305 @@
       ],
       "castShadow": true,
       "receiveShadow": true
+    },
+    {
+      "id": "parts_bin_shelving_27766_a",
+      "name": "Parts bin shelving A",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27766/v1/model.glb",
+      "position": [
+        10,
+        0,
+        26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "parts_bin_shelving_27766_b",
+      "name": "Parts bin shelving B",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27766/v1/model.glb",
+      "position": [
+        12,
+        0,
+        26
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "washing_cabinet_27742",
+      "name": "Parts washing cabinet",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27742/v1/model.glb",
+      "position": [
+        10,
+        0,
+        28
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "parts_bin_shelving_alpha_27766",
+      "name": "Parts bin shelving Alpha spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27766/v1/model.glb",
+      "position": [
+        -38,
+        0,
+        -45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "safety_sign_alpha_27775",
+      "name": "Safety sign post Alpha spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27775/v1/model.glb",
+      "position": [
+        -30,
+        0,
+        -40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "first_aid_alpha_27786",
+      "name": "First aid cabinet Alpha spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27786/v1/model.glb",
+      "position": [
+        -40,
+        0,
+        -41
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pallet_omega_27773",
+      "name": "Timber pallet Omega spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27773/v1/model.glb",
+      "position": [
+        38,
+        0,
+        45
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "stillage_omega_27774",
+      "name": "Steel stillage cage Omega spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27774/v1/model.glb",
+      "position": [
+        30,
+        0,
+        40
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "safety_sign_omega_27775",
+      "name": "Safety sign post Omega spawn",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27775/v1/model.glb",
+      "position": [
+        40,
+        0,
+        41
+      ],
+      "rotation": [
+        0,
+        3.14,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "parts_washing_cabinet_central_27742",
+      "name": "Parts washing cabinet central",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27742/v1/model.glb",
+      "position": [
+        0,
+        0,
+        5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "workshop_trolley_central_27769",
+      "name": "Workshop trolley central",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27769/v1/model.glb",
+      "position": [
+        -3,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "oil_drum_stand_central_27770",
+      "name": "Oil drum stand central",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27770/v1/model.glb",
+      "position": [
+        4,
+        0,
+        2
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "swarf_bin_central_27771",
+      "name": "Swarf bin central",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27771/v1/model.glb",
+      "position": [
+        -4,
+        0,
+        -3
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
     }
   ]
 }
