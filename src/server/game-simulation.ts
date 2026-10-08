@@ -362,20 +362,28 @@ export class GameSimulation {
     }
 
     // Check elimination victory condition during LIVE phase
-    if (currentPhase === 'LIVE' && !this.bombState.isPlanted) {
-      const alphaAlive = Array.from(this.players.values()).filter(p => p.team === 'alpha' && p.isAlive).length;
-      const omegaAlive = Array.from(this.players.values()).filter(p => p.team === 'omega' && p.isAlive).length;
-      const attackingTeam = this.getAttackingTeam();
+    this.checkEliminationVictory();
+  }
 
-      if (alphaAlive === 0 && omegaAlive > 0) {
-        const winner = 'omega';
-        const reason = attackingTeam === 'alpha' ? 'Attackers eliminated' : 'Defenders eliminated';
-        this.endRound(winner, reason);
-      } else if (omegaAlive === 0 && alphaAlive > 0) {
-        const winner = 'alpha';
-        const reason = attackingTeam === 'omega' ? 'Attackers eliminated' : 'Defenders eliminated';
-        this.endRound(winner, reason);
-      }
+  private checkEliminationVictory() {
+    if (this.roundSM.getPhase() !== 'LIVE' || this.bombState.isPlanted) return;
+
+    const alphaAlive = Array.from(this.players.values()).filter(p => p.team === 'alpha' && p.isAlive).length;
+    const omegaAlive = Array.from(this.players.values()).filter(p => p.team === 'omega' && p.isAlive).length;
+    const attackingTeam = this.getAttackingTeam();
+    const defendingTeam = this.getDefendingTeam();
+
+    if (alphaAlive === 0 && omegaAlive === 0) {
+      // Mutual elimination: Defenders win if bomb is unplanted
+      this.endRound(defendingTeam, 'Mutual elimination (Defenders win)');
+    } else if (alphaAlive === 0 && omegaAlive > 0) {
+      const winner = 'omega';
+      const reason = attackingTeam === 'alpha' ? 'Attackers eliminated' : 'Defenders eliminated';
+      this.endRound(winner, reason);
+    } else if (omegaAlive === 0 && alphaAlive > 0) {
+      const winner = 'alpha';
+      const reason = attackingTeam === 'omega' ? 'Attackers eliminated' : 'Defenders eliminated';
+      this.endRound(winner, reason);
     }
   }
 
@@ -524,6 +532,27 @@ export class GameSimulation {
       !Number.isFinite(pitch)
     ) {
       return;
+    }
+
+    // Spawn Boundary / Freeze Enforcement: In BUY phase, players cannot leave their spawn zone
+    if (this.roundSM.getPhase() === 'BUY') {
+      const attackingTeam = this.getAttackingTeam();
+      const isAttacker = player.team === attackingTeam;
+      const spawns = isAttacker ? this.mapDefinition.teamSpawns.alpha : this.mapDefinition.teamSpawns.omega;
+
+      let minSpawnDist = Infinity;
+      for (const s of spawns) {
+        const d = Math.hypot(pos[0] - s.position[0], pos[2] - s.position[2]);
+        if (d < minSpawnDist) minSpawnDist = d;
+      }
+
+      // If client attempts to move outside spawn boundary (> 3.5m radius from spawn points) during BUY phase, reject displacement
+      if (minSpawnDist > 3.5) {
+        player.rotationY = rotY;
+        player.pitch = pitch;
+        this.antiCheat.validateAimRotation(playerId, rotY, pitch);
+        return;
+      }
     }
 
     const serverNow = Date.now();
@@ -744,6 +773,9 @@ export class GameSimulation {
     if (aliveTeammates.length > 0) {
       victim.spectatingTargetId = aliveTeammates[0].id;
     }
+
+    // Immediate elimination check (zero-delay round end without waiting for 1s tick)
+    this.checkEliminationVictory();
   }
 
   /**

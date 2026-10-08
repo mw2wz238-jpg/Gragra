@@ -1,0 +1,53 @@
+{
+  "mapId": "hall",
+  "name": "The Grand Hall",
+  "version": "1.0.0",
+  "scale": 1.0,
+  "coordinateSystem": "Y-Up",
+  "assets": [
+    {
+      "id": "hall_core_structure",
+      "name": "Hall Core Architecture",
+      "category": "core",
+      "url": "/assets/maps/hall/visual/core/hall_core.glb",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1.0, 1.0, 1.0],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "hall_main_glb",
+      "name": "Hall Main Model",
+      "category": "core",
+      "url": "/assets/maps/hall/hall.glb",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1.0, 1.0, 1.0],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "hall_detail_props",
+      "name": "Hall Detail Props",
+      "category": "detail",
+      "url": "/assets/maps/hall/visual/detail/hall_detail.glb",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1.0, 1.0, 1.0],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "hall_optional_props",
+      "name": "Hall Optional Atmosphere",
+      "category": "optional",
+      "url": "/assets/maps/hall/visual/optional/hall_optional.glb",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1.0, 1.0, 1.0],
+      "castShadow": false,
+      "receiveShadow": true
+    }
+  ]
+}

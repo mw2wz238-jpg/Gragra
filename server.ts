@@ -19,6 +19,9 @@ import { testConnection, closeDatabase } from './src/db/client.ts';
 import { runMigrations } from './src/db/migrate.ts';
 import { vanguardRepository } from './src/db/repository.ts';
 
+import fs from 'fs';
+import { execSync } from 'child_process';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -26,7 +29,7 @@ export const app = express();
 export const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '100mb' }));
 
 // Custom lightweight cookie parser middleware
 app.use((req: any, _res, next) => {
@@ -101,6 +104,44 @@ app.get('/api/map/:mapId', (req, res) => {
 
 app.get('/api/map/vanguard_parking', (_req, res) => {
   res.json(VANGUARD_PARKING_MAP);
+});
+
+app.post('/api/maps/upload', (req, res) => {
+  try {
+    const { mapId = 'hall', filename = 'map.glb', fileData } = req.body || {};
+    if (!fileData) {
+      return res.status(400).json({ error: 'No fileData base64 provided' });
+    }
+
+    const cleanB64 = fileData.includes('base64,') ? fileData.split('base64,')[1] : fileData;
+    const buffer = Buffer.from(cleanB64, 'base64');
+
+    const targetDir = path.join(__dirname, 'public', 'assets', 'maps', mapId);
+    const coreDir = path.join(__dirname, 'public', 'assets', 'maps', mapId, 'visual', 'core');
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.mkdirSync(coreDir, { recursive: true });
+
+    if (filename.toLowerCase().endsWith('.zip')) {
+      const zipPath = path.join(targetDir, 'uploaded_map.zip');
+      fs.writeFileSync(zipPath, buffer);
+      try {
+        execSync(`unzip -o "${zipPath}" -d "${targetDir}"`);
+      } catch (e: any) {
+        console.warn('Zip extract notice:', e.message);
+      }
+    } else {
+      const glbPath = path.join(targetDir, `${mapId}.glb`);
+      const glbCorePath = path.join(coreDir, `${mapId}_core.glb`);
+      fs.writeFileSync(glbPath, buffer);
+      fs.writeFileSync(glbCorePath, buffer);
+    }
+
+    console.log(`[Server Map Upload] Successfully processed ${filename} for map '${mapId}'`);
+    res.json({ success: true, mapId, filename });
+  } catch (err: any) {
+    console.error('[Server Map Upload] Error:', err);
+    res.status(500).json({ error: err.message || 'Map upload failed' });
+  }
 });
 
 function getPlayerIdFromSession(req: any): string | null {

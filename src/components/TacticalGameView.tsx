@@ -7,8 +7,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { tacticalAudio } from '../audio/tactical-audio.ts';
-import { buildIndustrialZoneEnvironment, buildParkingMapEnvironment } from '../maps/builder.ts';
+import { buildHallEnvironment, buildIndustrialZoneEnvironment, buildParkingMapEnvironment } from '../maps/builder.ts';
 import { getMapDefinition } from '../maps/index.ts';
+import { visualLayerManager } from '../maps/visual-layer.ts';
 import type { DroppedWeaponEntity, GameMode, GrenadeType, RoundEndResult, RoundPhase } from '../shared/types.ts';
 import { VANGUARD_GRENADES, VANGUARD_SKINS, VANGUARD_WEAPONS } from '../shared/types.ts';
 
@@ -55,6 +56,9 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
   // Control Mode State (PC Keyboard+Mouse vs Mobile Touch HUD)
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
   const [controlMode, setControlMode] = useState<'PC' | 'MOBILE'>(isTouchDevice ? 'MOBILE' : 'PC');
+  const [renderMode, setRenderMode] = useState<'PROCEDURAL' | 'GLB'>(() => {
+    return (localStorage.getItem('vanguard_render_mode') as 'PROCEDURAL' | 'GLB') || 'GLB';
+  });
   const [isMobileEngagement, setIsMobileEngagement] = useState(false);
   const [isAds, setIsAds] = useState(false);
   const [isCrouching, setIsCrouching] = useState(false);
@@ -210,8 +214,28 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
 
     // 3. Environment: Build 3D Map Environment dynamically
     const builtMap = mapDef.id === 'industrial_zone'
-      ? buildIndustrialZoneEnvironment(scene)
+      ? buildIndustrialZoneEnvironment(scene, { hideWarehouseVisual: renderMode === 'GLB' })
+      : mapDef.id === 'hall'
+      ? buildHallEnvironment(scene)
       : buildParkingMapEnvironment(scene);
+
+    // Safely load Stage 1 Visual Layer Package & GLB assets (purely visual in vertical slice)
+    if (renderMode === 'GLB' || mapDef.id === 'hall') {
+      visualLayerManager.loadMapVisualPackage(mapDef.id, scene).then(() => {
+        // For 'hall' map keep legacy collider behavior; for 'industrial_zone' collision strictly remains procedural
+        if (mapDef.id !== 'industrial_zone') {
+          const glbMeshes = visualLayerManager.getCollidersForInstance(mapDef.id);
+          for (const m of glbMeshes) {
+            if (!builtMap.colliders.includes(m)) {
+              builtMap.colliders.push(m);
+              const box = new THREE.Box3();
+              box.setFromObject(m);
+              obstacleBoxes.push(box);
+            }
+          }
+        }
+      }).catch(() => {});
+    }
 
     // CRITICAL: Force scene world matrix update so object bounding boxes are calculated in global world coordinates!
     scene.updateMatrixWorld(true);
@@ -1115,7 +1139,8 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
           camera.updateProjectionMatrix();
         }
 
-        const baseSpeed = isCrouchingRef.current ? 3.0 : keysPressed['ShiftLeft'] ? 9.0 : 6.0;
+        const isBuyFreeze = roundPhaseRef.current === 'BUY';
+        const baseSpeed = isBuyFreeze ? 0 : (isCrouchingRef.current ? 3.0 : keysPressed['ShiftLeft'] ? 9.0 : 6.0);
         const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotationRef.current.yaw);
         const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotationRef.current.yaw);
 
@@ -1148,7 +1173,7 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
         const targetEyeY = standingSurfaceY + eyeHeight;
 
         // Jump impulse
-        if (keysPressed['Space'] && isGrounded) {
+        if (keysPressed['Space'] && isGrounded && !isBuyFreeze) {
           velocity.y = 5.8;
           isGrounded = false;
         }
@@ -1432,9 +1457,17 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
       if (renderer.domElement.parentElement) {
         renderer.domElement.parentElement.removeChild(renderer.domElement);
       }
+      visualLayerManager.disposeAll(scene);
       renderer.dispose();
     };
-  }, [matchId, mapId, playerId, assignedTeam]);
+  }, [matchId, mapId, playerId, assignedTeam, renderMode]);
+
+  const handleToggleRenderMode = () => {
+    const nextMode = renderMode === 'GLB' ? 'PROCEDURAL' : 'GLB';
+    setRenderMode(nextMode);
+    localStorage.setItem('vanguard_render_mode', nextMode);
+    tacticalAudio.playUiClick();
+  };
 
   const handleBuyItem = (itemId: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -1625,12 +1658,27 @@ export const TacticalGameView: React.FC<TacticalGameViewProps> = ({
               <h2 className="text-xl font-bold font-['Chakra_Petch'] text-cyan-400 tracking-wide uppercase">
                 Tactical Deployment
               </h2>
-              <button
-                onClick={handleToggleControlMode}
-                className="px-3 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 rounded-lg text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md"
-              >
-                {controlMode === 'PC' ? '💻 PC MODE' : '📱 MOBILE MODE'}
-              </button>
+              <div className="flex items-center gap-2">
+                {mapId === 'industrial_zone' && (
+                  <button
+                    onClick={handleToggleRenderMode}
+                    className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold uppercase tracking-wider border transition-all shadow-md ${
+                      renderMode === 'GLB'
+                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 hover:bg-amber-900'
+                        : 'bg-slate-800/80 border-slate-600 text-slate-300 hover:bg-slate-700'
+                    }`}
+                    title="Toggle between Procedural and GLB Vertical Slice"
+                  >
+                    {renderMode === 'GLB' ? '🏭 GLB SLICE' : '📐 PROCEDURAL'}
+                  </button>
+                )}
+                <button
+                  onClick={handleToggleControlMode}
+                  className="px-3 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 rounded-lg text-cyan-400 font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-md"
+                >
+                  {controlMode === 'PC' ? '💻 PC MODE' : '📱 MOBILE MODE'}
+                </button>
+              </div>
             </div>
 
             {controlMode === 'PC' ? (

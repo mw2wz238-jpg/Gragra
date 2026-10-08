@@ -1,0 +1,1389 @@
+{
+  "mapId": "industrial_zone",
+  "name": "Industrial Zone - Vertical Slice Bombsite B",
+  "version": 1,
+  "scale": 1,
+  "coordinateSystem": "+Y-up, 1 unit = 1 metre",
+  "assets": [
+    {
+      "id": "hall_bombsite_b_27790",
+      "name": "Day shift machine hall (Bombsite B Shell)",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27790/v1/model.glb",
+      "position": [
+        -18,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "cnc_machining_centre_27732",
+      "name": "CNC machining centre (Bombsite B Center Cover)",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27732/v1/model.glb",
+      "position": [
+        -18,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pallet_racking_bay_27757",
+      "name": "Pallet racking bay (Bombsite B North Wall Cover)",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27757/v1/model.glb",
+      "position": [
+        -18,
+        0,
+        -25.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "forklift_truck_27768",
+      "name": "Counterbalance forklift truck (Bombsite B South Gate Cover)",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27768/v1/model.glb",
+      "position": [
+        -13,
+        0,
+        -12
+      ],
+      "rotation": [
+        0,
+        -0.785398,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "open_scrap_skip_27772",
+      "name": "Open scrap skip (Bombsite B West Flank Cover)",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27772/v1/model.glb",
+      "position": [
+        -24.5,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "workbench_27763",
+      "name": "Workbench with engineer's vice",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27763/v1/model.glb",
+      "position": [
+        -23,
+        0,
+        -26.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "air_compressor_27740",
+      "name": "Piston air compressor with receiver tank",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27740/v1/model.glb",
+      "position": [
+        -13.5,
+        0,
+        -26.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "parts_bin_shelving_27766",
+      "name": "Parts bin shelving with plastic bins",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27766/v1/model.glb",
+      "position": [
+        -11,
+        0,
+        -26.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "vertical_milling_machine_27725",
+      "name": "Vertical milling machine",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27725/v1/model.glb",
+      "position": [
+        -26.4,
+        0,
+        -23
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pillar_drill_press_27729",
+      "name": "Pillar drill press, floor standing",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27729/v1/model.glb",
+      "position": [
+        -26.5,
+        0,
+        -14
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "hydraulic_press_27730",
+      "name": "Hydraulic workshop press, H frame",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27730/v1/model.glb",
+      "position": [
+        -26.4,
+        0,
+        -11.5
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "welding_table_27736",
+      "name": "Welding table with clamps",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27736/v1/model.glb",
+      "position": [
+        -23.5,
+        0,
+        -10.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "mig_welder_27737",
+      "name": "MIG welder on a bottle cart",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27737/v1/model.glb",
+      "position": [
+        -21.5,
+        0,
+        -10.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "welding_screen_27738",
+      "name": "Welding screen on castors",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27738/v1/model.glb",
+      "position": [
+        -22.5,
+        0,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "swarf_bin_27771",
+      "name": "Swarf bin on wheels",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27771/v1/model.glb",
+      "position": [
+        -24.8,
+        0,
+        -14
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pallet_cartons_27760",
+      "name": "Pallet of stacked cartons",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27760/v1/model.glb",
+      "position": [
+        -15.5,
+        0,
+        -10.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "stillage_cage_27774",
+      "name": "Steel stillage cage",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27774/v1/model.glb",
+      "position": [
+        -13.8,
+        0,
+        -10.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pallet_truck_27767",
+      "name": "Hand pallet truck",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27767/v1/model.glb",
+      "position": [
+        -16,
+        0,
+        -11.8
+      ],
+      "rotation": [
+        0,
+        0.785398,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "oil_drum_stand_27770",
+      "name": "Oil drum on a tipping stand with a tap",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27770/v1/model.glb",
+      "position": [
+        -10,
+        0,
+        -11
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "safety_bollard_27784",
+      "name": "Yellow safety bollard",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27784/v1/model.glb",
+      "position": [
+        -10,
+        0,
+        -9.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "fire_extinguisher_27785",
+      "name": "Fire extinguisher on a bracket",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27785/v1/model.glb",
+      "position": [
+        -9.1,
+        0,
+        -19
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "first_aid_station_27786",
+      "name": "First aid station cabinet",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27786/v1/model.glb",
+      "position": [
+        -9.1,
+        0,
+        -17
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "engine_lathe_27724",
+      "name": "Engine lathe with 2.4 m bed",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27724/v1/model.glb",
+      "position": [
+        -9.8,
+        0,
+        -24
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bench_lathe_27723",
+      "name": "Bench lathe on a cabinet stand",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27723/v1/model.glb",
+      "position": [
+        -9.8,
+        0,
+        -21
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "surface_grinder_27727",
+      "name": "Surface grinder with magnetic chuck",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27727/v1/model.glb",
+      "position": [
+        -9.8,
+        0,
+        -14
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pedestal_grinder_27728",
+      "name": "Pedestal bench grinder",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27728/v1/model.glb",
+      "position": [
+        -9.5,
+        0,
+        -12.5
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "cutoff_saw_27735",
+      "name": "Abrasive cut-off saw",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27735/v1/model.glb",
+      "position": [
+        -10,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "press_brake_27731",
+      "name": "Press brake for sheet metal",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27731/v1/model.glb",
+      "position": [
+        -26,
+        0,
+        -20.5
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "guillotine_shear_27733",
+      "name": "Sheet metal guillotine shear",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27733/v1/model.glb",
+      "position": [
+        -26,
+        0,
+        -15.5
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bandsaw_27726",
+      "name": "Horizontal metal cutting bandsaw",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27726/v1/model.glb",
+      "position": [
+        -26,
+        0,
+        -12.8
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "sheet_metal_rack_27761",
+      "name": "Sheet metal storage rack",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27761/v1/model.glb",
+      "position": [
+        -24.8,
+        0,
+        -25.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "cantilever_rack_27759",
+      "name": "Cantilever bar stock rack",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27759/v1/model.glb",
+      "position": [
+        -15.5,
+        0,
+        -26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "linisher_sander_27734",
+      "name": "Linisher belt sander on a stand",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27734/v1/model.glb",
+      "position": [
+        -26.2,
+        0,
+        -9.8
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "parts_washer_27742",
+      "name": "Parts washing cabinet with lift lid",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27742/v1/model.glb",
+      "position": [
+        -24.5,
+        0,
+        -9.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "tool_cabinet_27762",
+      "name": "Mobile tool cabinet with drawers",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27762/v1/model.glb",
+      "position": [
+        -21.2,
+        0,
+        -26.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pegboard_wall_27765",
+      "name": "Pegboard tool wall on a stand",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27765/v1/model.glb",
+      "position": [
+        -19,
+        0,
+        -26.6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "workshop_trolley_27769",
+      "name": "Two shelf workshop trolley",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27769/v1/model.glb",
+      "position": [
+        -19.5,
+        0,
+        -10.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "timber_pallet_27773",
+      "name": "Empty timber pallet",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27773/v1/model.glb",
+      "position": [
+        -17.2,
+        0,
+        -10.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "surface_plate_27776",
+      "name": "Cast iron surface plate on a stand",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27776/v1/model.glb",
+      "position": [
+        -9.8,
+        0,
+        -16
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "workshop_fan_27783",
+      "name": "Floor standing workshop fan",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27783/v1/model.glb",
+      "position": [
+        -26.2,
+        0,
+        -25.5
+      ],
+      "rotation": [
+        0,
+        0.785398,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "lockout_board_27788",
+      "name": "Lockout and isolation board",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27788/v1/model.glb",
+      "position": [
+        -9.4,
+        0,
+        -17.8
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "high_bay_light_1_27787",
+      "name": "High bay light fitting North-West",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27787/v1/model.glb",
+      "position": [
+        -22.5,
+        5.2,
+        -22.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": false
+    },
+    {
+      "id": "high_bay_light_2_27787",
+      "name": "High bay light fitting North-East",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27787/v1/model.glb",
+      "position": [
+        -13.5,
+        5.2,
+        -22.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": false
+    },
+    {
+      "id": "high_bay_light_3_27787",
+      "name": "High bay light fitting South-West",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27787/v1/model.glb",
+      "position": [
+        -22.5,
+        5.2,
+        -13.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": false
+    },
+    {
+      "id": "high_bay_light_4_27787",
+      "name": "High bay light fitting South-East",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27787/v1/model.glb",
+      "position": [
+        -13.5,
+        5.2,
+        -13.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": false
+    },
+    {
+      "id": "steel_corner_column_se_27743",
+      "name": "Steel hall corner column South-East",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27743/v1/model.glb",
+      "position": [
+        -8.8,
+        0,
+        -9
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "steel_hall_column_mid_27741",
+      "name": "Steel hall column Mid-East bay",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27741/v1/model.glb",
+      "position": [
+        -8.8,
+        0,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "concrete_floor_walkway_27755",
+      "name": "Concrete floor tile with walkway lines",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27755/v1/model.glb",
+      "position": [
+        -18,
+        0.01,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "concrete_floor_plain_27756",
+      "name": "Concrete floor tile plain",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27756/v1/model.glb",
+      "position": [
+        -12,
+        0.01,
+        -6
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": false,
+      "receiveShadow": true
+    },
+    {
+      "id": "roof_truss_bay_center_27748",
+      "name": "Hall roof truss bay 6m",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27748/v1/model.glb",
+      "position": [
+        -18,
+        6,
+        -18
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "powder_coating_oven_27739",
+      "name": "Powder coating oven with hinged door",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27739/v1/model.glb",
+      "position": [
+        -20.5,
+        0,
+        -9.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "pallet_steel_bar_27758",
+      "name": "Pallet of steel bar stock",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27758/v1/model.glb",
+      "position": [
+        -13.5,
+        0,
+        -25.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "bench_tool_chest_27764",
+      "name": "Bench top tool chest",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27764/v1/model.glb",
+      "position": [
+        -22.5,
+        1.12,
+        -26.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "safety_sign_post_27775",
+      "name": "Free standing safety sign post",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27775/v1/model.glb",
+      "position": [
+        -10.2,
+        0,
+        -10.2
+      ],
+      "rotation": [
+        0,
+        -0.785398,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "coolant_tank_27777",
+      "name": "Coolant mixing tank with pump",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27777/v1/model.glb",
+      "position": [
+        -26.2,
+        0,
+        -25
+      ],
+      "rotation": [
+        0,
+        1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "steel_swarf_pile_27778",
+      "name": "Pile of steel swarf",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27778/v1/model.glb",
+      "position": [
+        -25.2,
+        0,
+        -15.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "steel_chip_tray_27780",
+      "name": "Steel chip tray",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27780/v1/model.glb",
+      "position": [
+        -10,
+        0,
+        -22.8
+      ],
+      "rotation": [
+        0,
+        -1.570796,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "vernier_caliper_27779",
+      "name": "Vernier caliper on a bench block",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27779/v1/model.glb",
+      "position": [
+        -9.8,
+        1.05,
+        -16.2
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "micrometer_stand_27781",
+      "name": "Micrometer on a bench stand",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27781/v1/model.glb",
+      "position": [
+        -9.8,
+        1.05,
+        -15.8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "machined_parts_set_27782",
+      "name": "Set of machined parts",
+      "category": "core",
+      "url": "https://cdn.3dassets.dev/assets/27782/v1/model.glb",
+      "position": [
+        -23.4,
+        1.12,
+        -26.5
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    }
+  ]
+}

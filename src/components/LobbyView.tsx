@@ -32,13 +32,70 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'PLAY' | 'PROFILE' | 'WEAPONS' | 'SHOP' | 'HISTORY'>('PLAY');
   const [selectedMode, setSelectedMode] = useState<GameMode>('COMPETITIVE');
-  const [selectedMapId, setSelectedMapId] = useState<string>('industrial_zone');
+  const [selectedMapId, setSelectedMapId] = useState<string>('hall');
   const [showModeModal, setShowModeModal] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   const [isPartyReady, setIsPartyReady] = useState(true);
   const [partyCodeCopied, setPartyCodeCopied] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(profile.username);
+  const [uploadingMap, setUploadingMap] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+
+  const handleMapFileUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>) => {
+    let file: File | null = null;
+    if ('files' in e.target && (e.target as HTMLInputElement).files?.[0]) {
+      file = (e.target as HTMLInputElement).files![0];
+    } else if ('dataTransfer' in e && (e as React.DragEvent<HTMLDivElement>).dataTransfer?.files?.[0]) {
+      e.preventDefault();
+      file = (e as React.DragEvent<HTMLDivElement>).dataTransfer.files[0];
+    }
+
+    if (!file) return;
+
+    const filename = file.name;
+    const isGlbOrZip = filename.toLowerCase().endsWith('.glb') || filename.toLowerCase().endsWith('.gltf') || filename.toLowerCase().endsWith('.zip');
+    if (!isGlbOrZip) {
+      alert('Proszę wybrać plik .glb, .gltf lub .zip mapy!');
+      return;
+    }
+
+    setUploadingMap(true);
+    setUploadMessage(`Wczytywanie mapy ${filename}...`);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await authFetch('/api/maps/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mapId: 'hall',
+            filename,
+            fileData: base64,
+          }),
+        });
+        const data = await res.json();
+        setUploadingMap(false);
+        if (data && data.success) {
+          setSelectedMapId('hall');
+          setUploadMessage(`✓ Pomyślnie wczytano plik mapy Hall (${filename})! Ustawiono jako aktywną mapę.`);
+          tacticalAudio.playVictoryStinger();
+          setTimeout(() => {
+            setShowMapModal(false);
+            setUploadMessage(null);
+          }, 2000);
+        } else {
+          setUploadMessage(`❌ Błąd wczytywania: ${data.error || 'Nieznany błąd'}`);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setUploadingMap(false);
+      setUploadMessage(`❌ Błąd: ${err.message}`);
+    }
+  };
 
   // Authoritative Inventory & Wallet State
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -486,10 +543,17 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                             FEATURED
                           </span>
                         )}
+                        {selectedMapId === 'hall' && (
+                          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono rounded font-bold">
+                            NEW MAP
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-slate-400 font-mono mt-0.5">
                         {selectedMapId === 'industrial_zone'
                           ? 'Factory Hall · Rail Depot · Chemical Silos'
+                          : selectedMapId === 'hall'
+                          ? 'Grand Atrium · Balcony Mezzanine · Colonnade Chokepoints'
                           : 'Multi-Level Urban Concrete Garage'}
                       </p>
                     </div>
@@ -1000,6 +1064,16 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
             <div className="space-y-4">
               {[
                 {
+                  id: 'hall',
+                  name: 'The Grand Hall',
+                  tag: 'NEW / 5V5 COMPETITIVE',
+                  tagColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                  desc: 'Monumental neoclassical atrium with dual-tier balconies, central fountain pavilion, colonnade corridors, and elevated sniper perches.',
+                  bombsites: 'Site A (East Gallery) · Site B (West Atrium)',
+                  layout: 'Symmetric dual-lane design, central crossfire corridor, multi-elevation balconies.',
+                  scale: '80m × 80m (1:1 Normalized Scale)',
+                },
+                {
                   id: 'industrial_zone',
                   name: 'Industrial Zone',
                   tag: 'FEATURED / USER MAP',
@@ -1057,6 +1131,35 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* CUSTOM GLB & ZIP MAP UPLOADER ZONE */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleMapFileUpload}
+              className="mt-5 p-5 border-2 border-dashed border-cyan-500/40 rounded-2xl bg-cyan-950/20 text-center transition-all hover:border-cyan-400 hover:bg-cyan-950/30"
+            >
+              <div className="text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider mb-1">
+                📥 IMPORT WŁASNEGO PLIKU MAPY (.GLB / .ZIP)
+              </div>
+              <p className="text-[11px] text-slate-300 font-mono mb-3">
+                Przeciągnij i upuść plik <span className="text-cyan-300 font-bold">Hall.glb</span> lub paczkę <span className="text-cyan-300 font-bold">Hall.zip</span>, aby wgrać geometrię mapy do silnika.
+              </p>
+              <label className="cursor-pointer inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold font-mono transition-all shadow-lg hover:scale-105 active:scale-95">
+                <span>{uploadingMap ? 'PRZETWARZANIE MAPY...' : '📂 WYBIERZ PLIK MAPY HALL (.GLB / .ZIP)'}</span>
+                <input
+                  type="file"
+                  accept=".glb,.gltf,.zip"
+                  onChange={handleMapFileUpload}
+                  disabled={uploadingMap}
+                  className="hidden"
+                />
+              </label>
+              {uploadMessage && (
+                <div className="mt-3 text-xs font-mono text-emerald-400 font-bold animate-pulse">
+                  {uploadMessage}
+                </div>
+              )}
             </div>
           </div>
         </div>

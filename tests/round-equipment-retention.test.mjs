@@ -145,10 +145,9 @@ describe('Project Vanguard - Etap 2: Equipment Retention Policy', () => {
 
     // p2 is eliminated
     sim.roundSM.advancePhase(); // LIVE
-    sim['eliminatePlayer'](p2, 'p1', false);
-    sim.roundSM.advancePhase('alpha'); // ROUND_END
-    sim.roundSM.advancePhase(); // REWARDS
-    sim.roundSM.advancePhase(); // BUY Round 2
+    sim['eliminatePlayer'](p2, 'p1', false); // automatically advances LIVE -> ROUND_END
+    sim.roundSM.advancePhase(); // ROUND_END -> REWARDS
+    sim.roundSM.advancePhase(); // REWARDS -> BUY Round 2
     sim['resetRoundState']();
 
     // Round 2 start state
@@ -162,11 +161,10 @@ describe('Project Vanguard - Etap 2: Equipment Retention Policy', () => {
     sim.handlePlayerBuy('p2', 'vanguard_shotgun');
     assert.equal(p2.equippedWeaponId, 'vanguard_shotgun');
 
-    sim.roundSM.advancePhase(); // LIVE
-    sim['eliminatePlayer'](p1, 'p2', false);
-    sim.roundSM.advancePhase('omega'); // ROUND_END
-    sim.roundSM.advancePhase(); // REWARDS
-    sim.roundSM.advancePhase(); // BUY Round 3
+    sim.roundSM.advancePhase(); // BUY -> LIVE
+    sim['eliminatePlayer'](p1, 'p2', false); // automatically advances LIVE -> ROUND_END
+    sim.roundSM.advancePhase(); // ROUND_END -> REWARDS
+    sim.roundSM.advancePhase(); // REWARDS -> BUY Round 3
     sim['resetRoundState']();
 
     // Round 3 start state

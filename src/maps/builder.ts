@@ -151,7 +151,10 @@ function createWoodenCrateCanvasTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-export function buildIndustrialZoneEnvironment(scene: THREE.Scene): BuiltMapResult {
+export function buildIndustrialZoneEnvironment(
+  scene: THREE.Scene,
+  options?: { hideWarehouseVisual?: boolean }
+): BuiltMapResult {
   const colliders: THREE.Object3D[] = [];
 
   // Fog & Atmosphere
@@ -263,8 +266,33 @@ export function buildIndustrialZoneEnvironment(scene: THREE.Scene): BuiltMapResu
   catwalk.receiveShadow = true;
 
   whGroup.add(whWallNorth, whWallSouthA, whWallSouthB, whWallWest, whWallEastA, whWallEastB, whRoof, turbine, catwalk);
+  if (options?.hideWarehouseVisual) {
+    whGroup.visible = false;
+
+    // GLB Mode: Align procedural colliders directly with GLB 27790 footprint (18.4x18.4m centered at [-18, 0, -18])
+    // This eliminates the 5-9m invisible walls at North (Z: -36 to -27) and West (X: -32 to -27)
+    const hallNorthWall = new THREE.Mesh(new THREE.BoxGeometry(18.4, whHeight, 0.6));
+    hallNorthWall.position.set(-18, whHeight / 2, -27.2);
+
+    const hallWestWall = new THREE.Mesh(new THREE.BoxGeometry(0.6, whHeight, 18.4));
+    hallWestWall.position.set(-27.2, whHeight / 2, -18);
+
+    // East wall with entryway (matching GLB corridor opening)
+    const hallEastWallA = new THREE.Mesh(new THREE.BoxGeometry(0.6, whHeight, 6.5));
+    hallEastWallA.position.set(-8.8, whHeight / 2, -23.75);
+    const hallEastWallB = new THREE.Mesh(new THREE.BoxGeometry(0.6, whHeight, 6.5));
+    hallEastWallB.position.set(-8.8, whHeight / 2, -12.25);
+
+    // Center CNC cover collider (matches CNC machining centre 27732 at [-18, 0, -18])
+    const cncCollider = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.0, 3.4));
+    cncCollider.position.set(-18, 1.5, -18);
+
+    colliders.push(hallNorthWall, hallWestWall, hallEastWallA, hallEastWallB, cncCollider);
+  } else {
+    // PROCEDURAL Mode: Retain 100% exact original procedural warehouse colliders
+    colliders.push(whWallNorth, whWallSouthA, whWallSouthB, whWallWest, whWallEastA, whWallEastB, turbine, catwalk);
+  }
   scene.add(whGroup);
-  colliders.push(whWallNorth, whWallSouthA, whWallSouthB, whWallWest, whWallEastA, whWallEastB, turbine, catwalk);
 
   // 4. Chemical Storage Silos (Bombsite A) [20, 0, 18]
   const siloGroup = new THREE.Group();
@@ -559,3 +587,312 @@ export function buildParkingMapEnvironment(scene: THREE.Scene): BuiltMapResult {
     bombsiteBPos: [-14, 5.0, 14],
   };
 }
+
+/**
+ * Procedural Marble Canvas Texture Generator for The Grand Hall
+ */
+function createMarbleCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Subtle veins
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 8; i++) {
+      ctx.beginPath();
+      let x = Math.random() * 512;
+      let y = 0;
+      ctx.moveTo(x, y);
+      while (y < 512) {
+        y += 40 + Math.random() * 40;
+        x += (Math.random() - 0.5) * 60;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    // Grid tile joints
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 3;
+    for (let x = 0; x < 512; x += 128) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+    for (let y = 0; y < 512; y += 128) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(8, 8);
+  return tex;
+}
+
+function createClassicalStoneCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // Stone panel grooves
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 4;
+    for (let y = 0; y < 512; y += 64) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
+    for (let x = 0; x < 512; x += 128) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 512);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  return tex;
+}
+
+/**
+ * Build 3D The Grand Hall Environment
+ * Features:
+ * - Grand Central Nave with Monumental Marble Colonnades & Chandeliers
+ * - Central Elevated Skywalk Bridge (y = 5.0m) with Connecting Ramps
+ * - Bombsite A: The Grand Vault & Treasury with Armored Enclosures [18, 0.5, 16]
+ * - Bombsite B: West Mezzanine Atrium with Elevated Balcony [-16, 0.5, -16]
+ * - North Portico (Alpha Spawns) [-32, 0.5, -36]
+ * - South Vault Arcade (Omega Spawns) [32, 0.5, 36]
+ * - Tactical Neoclassical Covers, Plinths, Ballistic Partitions, & Crates
+ */
+export function buildHallEnvironment(scene: THREE.Scene): BuiltMapResult {
+  const colliders: THREE.Object3D[] = [];
+
+  // Fog & Grand Atmosphere
+  scene.fog = new THREE.FogExp2(0x0a0f1d, 0.012);
+
+  // Textures
+  const marbleTex = createMarbleCanvasTexture();
+  const stoneTex = createClassicalStoneCanvasTexture();
+
+  // Materials
+  const marbleMat = new THREE.MeshStandardMaterial({ map: marbleTex, roughness: 0.35, metalness: 0.1 });
+  const darkMarbleMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.2 });
+  const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 0.75, metalness: 0.1 });
+  const goldTrimMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.8 });
+  const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.4, metalness: 0.15 });
+  const vaultSteelMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.3, metalness: 0.8 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.9 });
+  const coverMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.6, metalness: 0.2 });
+
+  // Bombsite Marker Materials
+  const bombsiteAMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+  const bombsiteBMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+
+  // 1. Ground Plane (90x90m Polished Marble)
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(92, 92), marbleMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  colliders.push(ground);
+
+  // Central Carpet / Runner Slabs
+  const naveRunner = new THREE.Mesh(new THREE.PlaneGeometry(12, 80), darkMarbleMat);
+  naveRunner.rotation.x = -Math.PI / 2;
+  naveRunner.position.y = 0.01;
+  naveRunner.receiveShadow = true;
+  scene.add(naveRunner);
+
+  // 2. Vaulted Ceiling (14m High)
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(92, 92), ceilingMat);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = 14;
+  scene.add(ceiling);
+
+  // 3. Perimeter Exterior Walls (14m High)
+  const wallH = 14;
+  const wallN = new THREE.Mesh(new THREE.BoxGeometry(92, wallH, 1.5), stoneMat);
+  wallN.position.set(0, wallH / 2, -45);
+  const wallS = new THREE.Mesh(new THREE.BoxGeometry(92, wallH, 1.5), stoneMat);
+  wallS.position.set(0, wallH / 2, 45);
+  const wallE = new THREE.Mesh(new THREE.BoxGeometry(1.5, wallH, 92), stoneMat);
+  wallE.position.set(45, wallH / 2, 0);
+  const wallW = new THREE.Mesh(new THREE.BoxGeometry(1.5, wallH, 92), stoneMat);
+  wallW.position.set(-45, wallH / 2, 0);
+  scene.add(wallN, wallS, wallE, wallW);
+  colliders.push(wallN, wallS, wallE, wallW);
+
+  // 4. Monumental Classical Columns along Grand Central Nave
+  const columnPositions = [
+    [-10, -28], [-10, -14], [-10, 0], [-10, 14], [-10, 28],
+    [10, -28], [10, -14], [10, 0], [10, 14], [10, 28],
+  ];
+  columnPositions.forEach(([cx, cz]) => {
+    // Column Base
+    const base = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), marbleMat);
+    base.position.set(cx, 0.6, cz);
+    base.castShadow = true;
+    base.receiveShadow = true;
+
+    // Column Shaft (Cylinder)
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 12, 24), pillarMat);
+    shaft.position.set(cx, 7, cz);
+    shaft.castShadow = true;
+    shaft.receiveShadow = true;
+
+    // Gold Trim Ring
+    const trim = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.4, 24), goldTrimMat);
+    trim.position.set(cx, 2.0, cz);
+
+    // Column Capital
+    const capital = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.0, 2.4), marbleMat);
+    capital.position.set(cx, 13.5, cz);
+
+    scene.add(base, shaft, trim, capital);
+    colliders.push(base, shaft);
+  });
+
+  // 5. Central Skywalk Bridge (y = 5.0m)
+  const skywalk = new THREE.Mesh(new THREE.BoxGeometry(24, 0.5, 8), darkMarbleMat);
+  skywalk.position.set(0, 5.0, 0);
+  skywalk.receiveShadow = true;
+  skywalk.castShadow = true;
+  scene.add(skywalk);
+  colliders.push(skywalk);
+
+  // Skywalk Glass Railings
+  const railingN = new THREE.Mesh(new THREE.BoxGeometry(24, 1.1, 0.2), glassMat);
+  railingN.position.set(0, 5.8, -4);
+  const railingS = new THREE.Mesh(new THREE.BoxGeometry(24, 1.1, 0.2), glassMat);
+  railingS.position.set(0, 5.8, 4);
+  scene.add(railingN, railingS);
+  colliders.push(railingN, railingS);
+
+  // Skywalk Ramps (East & West)
+  const rampEast = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 16), darkMarbleMat);
+  rampEast.position.set(15, 2.5, 0);
+  rampEast.rotation.x = 0.32;
+  rampEast.receiveShadow = true;
+  const rampWest = new THREE.Mesh(new THREE.BoxGeometry(6, 0.4, 16), darkMarbleMat);
+  rampWest.position.set(-15, 2.5, 0);
+  rampWest.rotation.x = -0.32;
+  rampWest.receiveShadow = true;
+  scene.add(rampEast, rampWest);
+  colliders.push(rampEast, rampWest);
+
+  // 6. Bombsite A: The Grand Vault & Treasury Sector [18, 0, 16]
+  const vaultWallA = new THREE.Mesh(new THREE.BoxGeometry(18, 6, 1.2), vaultSteelMat);
+  vaultWallA.position.set(22, 3, 8);
+  const vaultWallB = new THREE.Mesh(new THREE.BoxGeometry(1.2, 6, 18), vaultSteelMat);
+  vaultWallB.position.set(30, 3, 17);
+  scene.add(vaultWallA, vaultWallB);
+  colliders.push(vaultWallA, vaultWallB);
+
+  // Vault Armored Heavy Safes / Gold Crates (Tactical Cover)
+  [
+    [16, 1.0, 14, 2.4, 2.0, 2.4],
+    [22, 0.75, 18, 2.0, 1.5, 3.0],
+    [18, 0.6, 20, 1.8, 1.2, 1.8],
+    [24, 0.75, 12, 1.8, 1.5, 1.8],
+  ].forEach(([vx, vy, vz, sx, sy, sz]) => {
+    const safe = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), vaultSteelMat);
+    safe.position.set(vx, vy, vz);
+    safe.castShadow = true;
+    safe.receiveShadow = true;
+    const goldBand = new THREE.Mesh(new THREE.BoxGeometry(sx + 0.05, 0.2, sz + 0.05), goldTrimMat);
+    goldBand.position.set(vx, vy + 0.4, vz);
+    scene.add(safe, goldBand);
+    colliders.push(safe);
+  });
+
+  // Bombsite A Hologram
+  const siteACyl = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.1, 32), bombsiteAMat);
+  siteACyl.position.set(18, 0.05, 16);
+  scene.add(siteACyl);
+
+  // 7. Bombsite B: West Mezzanine Atrium [-16, 0, -16]
+  const mezzanineDeck = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 18), darkMarbleMat);
+  mezzanineDeck.position.set(-20, 2.5, -20);
+  mezzanineDeck.receiveShadow = true;
+  mezzanineDeck.castShadow = true;
+
+  const mezRamp = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 10), darkMarbleMat);
+  mezRamp.position.set(-10, 1.25, -20);
+  mezRamp.rotation.z = -0.25;
+  mezRamp.receiveShadow = true;
+
+  scene.add(mezzanineDeck, mezRamp);
+  colliders.push(mezzanineDeck, mezRamp);
+
+  // Mezzanine Pedestals / Art Display Plinths (Cover)
+  [
+    [-14, 1.0, -14, 1.8, 2.0, 1.8],
+    [-18, 1.0, -18, 2.2, 2.0, 2.2],
+    [-22, 3.25, -22, 2.0, 1.5, 2.0],
+    [-24, 3.25, -16, 1.8, 1.5, 1.8],
+  ].forEach(([px, py, pz, sx, sy, sz]) => {
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), marbleMat);
+    plinth.position.set(px, py, pz);
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    scene.add(plinth);
+    colliders.push(plinth);
+  });
+
+  // Bombsite B Hologram
+  const siteBCyl = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.1, 32), bombsiteBMat);
+  siteBCyl.position.set(-16, 0.05, -16);
+  scene.add(siteBCyl);
+
+  // 8. North Portico (Alpha Spawns [-32, 0.5, -36])
+  const porticoArch = new THREE.Mesh(new THREE.BoxGeometry(20, 5, 2), stoneMat);
+  porticoArch.position.set(-32, 2.5, -42);
+  scene.add(porticoArch);
+  colliders.push(porticoArch);
+
+  // 9. South Vault Arcade (Omega Spawns [32, 0.5, 36])
+  const arcadeArch = new THREE.Mesh(new THREE.BoxGeometry(20, 5, 2), stoneMat);
+  arcadeArch.position.set(32, 2.5, 42);
+  scene.add(arcadeArch);
+  colliders.push(arcadeArch);
+
+  // 10. Additional Tactical Cover & Partition Barriers across corridors
+  [
+    [-4, 0.75, -20], [4, 0.75, -20],
+    [-4, 0.75, 20], [4, 0.75, 20],
+    [-25, 0.75, 0], [25, 0.75, 0],
+    [0, 0.75, -12], [0, 0.75, 12],
+  ].forEach(([cx, cy, cz]) => {
+    const barrier = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.5, 1.0), coverMat);
+    barrier.position.set(cx, cy, cz);
+    barrier.castShadow = true;
+    barrier.receiveShadow = true;
+    scene.add(barrier);
+    colliders.push(barrier);
+  });
+
+  return {
+    colliders,
+    bombsiteAPos: [18, 0.5, 16],
+    bombsiteBPos: [-16, 0.5, -16],
+  };
+}
+
