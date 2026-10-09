@@ -1,0 +1,13 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const root = path.join(__dirname, '..');
+const partsDir = path.join(root, 'src/components/.tg_parts');
+const out = path.join(root, 'src/components/TacticalGameView.tsx');
+if (!fs.existsSync(partsDir)) process.exit(0);
+const files = fs.readdirSync(partsDir).filter(f => f.startsWith('part') && f.endsWith('.txt')).sort();
+if (files.length === 0) process.exit(0);
+const content = files.map(f => fs.readFileSync(path.join(partsDir, f), 'utf8')).join('');
+fs.writeFileSync(out, content);
+console.log('[assemble-tg] wrote', out, content.length, 'bytes from', files.length, 'parts');
