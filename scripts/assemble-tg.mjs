@@ -1,31 +1,37 @@
 #!/usr/bin/env node
 /**
- * Assembles TacticalGameView.tsx from base64 parts in src/components/.tg_parts/
- * Run: node scripts/assemble-tg.mjs
+ * Restores src/components/TacticalGameView.tsx from gzipped base64 parts
+ * (avoids GitHub single-file size / push limits for the 101kB view).
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { gunzipSync } from 'zlib';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const dir = join(root, 'src/components/.tg_parts');
+const partsDir = join(root, 'src/components/.tg_parts');
+const single = join(partsDir, 'TacticalGameView.tsx.gz.b64');
 const out = join(root, 'src/components/TacticalGameView.tsx');
 
-if (!existsSync(dir)) {
-  console.error('[assemble-tg] missing', dir);
-  process.exit(1);
+function collectB64() {
+  if (existsSync(single)) {
+    return readFileSync(single, 'utf8').trim();
+  }
+  if (!existsSync(partsDir)) {
+    console.error('[assemble-tg] missing', partsDir);
+    process.exit(1);
+  }
+  const files = readdirSync(partsDir)
+    .filter((f) => /^gz_\d+\.txt$/.test(f))
+    .sort();
+  if (!files.length) {
+    console.error('[assemble-tg] no gz_XX.txt parts in', partsDir);
+    process.exit(1);
+  }
+  return files.map((f) => readFileSync(join(partsDir, f), 'utf8').trim()).join('');
 }
 
-const files = readdirSync(dir)
-  .filter((f) => f.startsWith('b64_') && f.endsWith('.txt'))
-  .sort();
-
-if (files.length === 0) {
-  console.error('[assemble-tg] no b64_*.txt parts found');
-  process.exit(1);
-}
-
-const b64 = files.map((f) => readFileSync(join(dir, f), 'utf8')).join('');
-const buf = Buffer.from(b64, 'base64');
+const b64 = collectB64();
+const buf = gunzipSync(Buffer.from(b64, 'base64'));
 writeFileSync(out, buf);
-console.log('[assemble-tg] wrote', out, buf.length, 'bytes from', files.length, 'parts');
+console.log('[assemble-tg] restored', out, buf.length, 'bytes');
