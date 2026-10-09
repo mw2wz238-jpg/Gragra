@@ -14,13 +14,23 @@ export type VisualLayerCategory = 'core' | 'detail' | 'optional';
 export interface VisualLayerAssetConfig {
   id: string;
   name: string;
+  /** Routing layer: core | detail | optional. Shipyard manifests may put this in `layer` instead. */
   category: VisualLayerCategory;
+  /** Alternate field used by shipyard visual manifest (core/detail/optional). */
+  layer?: VisualLayerCategory | string;
   url?: string;
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
   castShadow?: boolean;
   receiveShadow?: boolean;
+}
+
+function resolveLayerCategory(config: VisualLayerAssetConfig): VisualLayerCategory {
+  const raw = (config.layer || config.category || 'optional').toString().toLowerCase();
+  if (raw === 'core' || raw === 'detail' || raw === 'optional') return raw;
+  // Semantic categories (dock, ground, building, …) default to core so they remain visible.
+  return 'core';
 }
 
 export interface VisualLayerManifest {
@@ -49,11 +59,7 @@ export class VisualLayerManager {
   private activeInstances: Map<string, VisualLayerInstance> = new Map();
   private gltfLoader: GLTFLoader = new GLTFLoader();
 
-  /**
-   * Create an isolated container for visual-only map enhancements
-   */
   public createVisualLayerContainer(mapId: string): VisualLayerInstance {
-    // If an instance already exists for this mapId, return it
     const existing = this.activeInstances.get(mapId);
     if (existing && !existing.disposed) {
       return existing;
@@ -89,9 +95,6 @@ export class VisualLayerManager {
     return instance;
   }
 
-  /**
-   * Attach visual layer group to the Three.js scene
-   */
   public attachToScene(scene: THREE.Scene, instance: VisualLayerInstance): void {
     if (instance.disposed) return;
     if (!scene.children.includes(instance.rootGroup)) {
@@ -99,9 +102,6 @@ export class VisualLayerManager {
     }
   }
 
-  /**
-   * Set category visibility (e.g. toggle optional details based on graphics settings)
-   */
   public setLayerVisibility(instance: VisualLayerInstance, category: VisualLayerCategory, visible: boolean): void {
     if (instance.disposed) return;
     switch (category) {
@@ -117,9 +117,6 @@ export class VisualLayerManager {
     }
   }
 
-  /**
-   * Asynchronously load a GLTF/GLB model into a specified visual layer group
-   */
   public async loadAsset(
     instance: VisualLayerInstance,
     config: VisualLayerAssetConfig
@@ -160,10 +157,10 @@ export class VisualLayerManager {
             }
           });
 
-          // Route to appropriate group based on category
-          if (config.category === 'core') {
+          const layer = resolveLayerCategory(config);
+          if (layer === 'core') {
             instance.coreGroup.add(model);
-          } else if (config.category === 'detail') {
+          } else if (layer === 'detail') {
             instance.detailGroup.add(model);
           } else {
             instance.optionalGroup.add(model);
@@ -174,7 +171,6 @@ export class VisualLayerManager {
         },
         undefined,
         (err) => {
-          // Non-blocking error handling for missing optional visual files
           console.debug(`[VisualLayerManager] Optional asset ${config.id} (${config.url}) not loaded:`, err);
           resolve(null);
         }
@@ -182,28 +178,36 @@ export class VisualLayerManager {
     });
   }
 
-  /**
-   * Load the full visual layer package for a map
-   */
+  private async loadAssetsParallel(
+    instance: VisualLayerInstance,
+    configs: VisualLayerAssetConfig[],
+    concurrency = 10
+  ): Promise<void> {
+    let index = 0;
+    const workers = Array.from({ length: Math.min(concurrency, configs.length) }, async () => {
+      while (index < configs.length && !instance.disposed) {
+        const i = index++;
+        const cfg = configs[i];
+        if (cfg?.url) await this.loadAsset(instance, cfg);
+      }
+    });
+    await Promise.all(workers);
+  }
+
   public async loadMapVisualPackage(mapId: string, scene: THREE.Scene): Promise<VisualLayerInstance> {
     const instance = this.createVisualLayerContainer(mapId);
     this.attachToScene(scene, instance);
 
     try {
-      // 1. Try loading visual manifest if available
       const manifestUrl = `/assets/maps/${mapId}/visual/manifest.json`;
       const response = await fetch(manifestUrl);
       if (response.ok) {
         const manifest: VisualLayerManifest = await response.json();
         if (manifest && Array.isArray(manifest.assets)) {
-          for (const assetConfig of manifest.assets) {
-            if (assetConfig.url) {
-              await this.loadAsset(instance, assetConfig);
-            }
-          }
+          const withUrl = manifest.assets.filter((a) => !!a.url);
+          await this.loadAssetsParallel(instance, withUrl, 12);
         }
       } else {
-        // Fallback: Check standard GLB paths
         const fallbackCandidates: VisualLayerAssetConfig[] = [
           {
             id: `${mapId}_glb_root`,
@@ -234,9 +238,6 @@ export class VisualLayerManager {
     return instance;
   }
 
-  /**
-   * Helper to clean up single Object3D hierarchy
-   */
   private disposeObject3D(obj: THREE.Object3D): void {
     obj.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -253,9 +254,6 @@ export class VisualLayerManager {
     });
   }
 
-  /**
-   * Safely dispose geometries and materials of a visual layer instance
-   */
   public disposeInstance(instance: VisualLayerInstance, scene?: THREE.Scene): void {
     if (instance.disposed) return;
 
@@ -270,9 +268,6 @@ export class VisualLayerManager {
     this.activeInstances.delete(instance.mapId);
   }
 
-  /**
-   * Get all loaded mesh colliders for a map instance
-   */
   public getCollidersForInstance(mapId: string): THREE.Object3D[] {
     const instance = this.activeInstances.get(mapId);
     if (!instance || instance.disposed) return [];
@@ -286,9 +281,6 @@ export class VisualLayerManager {
     return meshes;
   }
 
-  /**
-   * Dispose all active visual layers
-   */
   public disposeAll(scene?: THREE.Scene): void {
     for (const instance of this.activeInstances.values()) {
       this.disposeInstance(instance, scene);
@@ -297,5 +289,4 @@ export class VisualLayerManager {
   }
 }
 
-// Global singleton instance
 export const visualLayerManager = new VisualLayerManager();
