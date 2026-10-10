@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Assemble TacticalGameView.tsx from parts.
- * Prefer: pXX.txt (plain)  then  bXX.txt (base64 of plain)
+ * Order of preference:
+ *   1. pXX.txt  (plain UTF-8)
+ *   2. bXX.txt  (base64 of ~10k plain chunks)
+ *   3. sXX.txt  (base64 of ~3k plain chunks)
  * Expected MD5: fb11fb7ec6c52c138ca21ebf405596fb
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
@@ -20,22 +23,24 @@ if (!existsSync(partsDir)) {
 }
 
 let combined;
+const all = readdirSync(partsDir);
 
-const plainFiles = readdirSync(partsDir).filter((f) => /^p\d{2}\.txt$/.test(f)).sort();
+const plainFiles = all.filter((f) => /^p\d{2}\.txt$/.test(f)).sort();
+const bFiles = all.filter((f) => /^b\d{2}\.txt$/.test(f)).sort();
+const sFiles = all.filter((f) => /^s\d{2}\.txt$/.test(f)).sort();
+
 if (plainFiles.length > 0) {
-  const bufs = plainFiles.map((f) => readFileSync(join(partsDir, f)));
-  combined = Buffer.concat(bufs);
+  combined = Buffer.concat(plainFiles.map((f) => readFileSync(join(partsDir, f))));
   console.log('[assemble-tg] from plain pXX.txt x', plainFiles.length);
+} else if (bFiles.length > 0) {
+  combined = Buffer.concat(bFiles.map((f) => Buffer.from(readFileSync(join(partsDir, f), 'utf8').trim(), 'base64')));
+  console.log('[assemble-tg] from base64 bXX.txt x', bFiles.length);
+} else if (sFiles.length > 0) {
+  combined = Buffer.concat(sFiles.map((f) => Buffer.from(readFileSync(join(partsDir, f), 'utf8').trim(), 'base64')));
+  console.log('[assemble-tg] from base64 sXX.txt x', sFiles.length);
 } else {
-  const b64Files = readdirSync(partsDir).filter((f) => /^b\d{2}\.txt$/.test(f)).sort();
-  if (b64Files.length > 0) {
-    const bufs = b64Files.map((f) => Buffer.from(readFileSync(join(partsDir, f), 'utf8').trim(), 'base64'));
-    combined = Buffer.concat(bufs);
-    console.log('[assemble-tg] from base64 bXX.txt x', b64Files.length);
-  } else {
-    console.error('[assemble-tg] no pXX.txt or bXX.txt parts found');
-    process.exit(1);
-  }
+  console.error('[assemble-tg] no parts found (p/b/s)');
+  process.exit(1);
 }
 
 const md5 = createHash('md5').update(combined).digest('hex');
