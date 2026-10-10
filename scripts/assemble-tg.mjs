@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Assemble TacticalGameView.tsx from plain text parts pXX.txt
+ * Assemble TacticalGameView.tsx from parts.
+ * Prefer: pXX.txt (plain)  then  bXX.txt (base64 of plain)
  * Expected MD5: fb11fb7ec6c52c138ca21ebf405596fb
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
@@ -18,29 +19,26 @@ if (!existsSync(partsDir)) {
   process.exit(1);
 }
 
-const files = readdirSync(partsDir)
-  .filter((f) => /^p\d{2}\.txt$/.test(f))
-  .sort();
+let combined;
 
-if (files.length === 0) {
-  // fallback: try old gz path
-  const gzB64 = join(partsDir, 'TacticalGameView.tsx.gz.b64');
-  if (existsSync(gzB64)) {
-    const { gunzipSync } = await import('zlib');
-    const b64 = readFileSync(gzB64, 'utf8').trim();
-    const buf = gunzipSync(Buffer.from(b64, 'base64'));
-    writeFileSync(out, buf);
-    console.log('[assemble-tg] restored from gz.b64', out, buf.length, 'bytes');
-    process.exit(0);
+const plainFiles = readdirSync(partsDir).filter((f) => /^p\d{2}\.txt$/.test(f)).sort();
+if (plainFiles.length > 0) {
+  const bufs = plainFiles.map((f) => readFileSync(join(partsDir, f)));
+  combined = Buffer.concat(bufs);
+  console.log('[assemble-tg] from plain pXX.txt x', plainFiles.length);
+} else {
+  const b64Files = readdirSync(partsDir).filter((f) => /^b\d{2}\.txt$/.test(f)).sort();
+  if (b64Files.length > 0) {
+    const bufs = b64Files.map((f) => Buffer.from(readFileSync(join(partsDir, f), 'utf8').trim(), 'base64'));
+    combined = Buffer.concat(bufs);
+    console.log('[assemble-tg] from base64 bXX.txt x', b64Files.length);
+  } else {
+    console.error('[assemble-tg] no pXX.txt or bXX.txt parts found');
+    process.exit(1);
   }
-  console.error('[assemble-tg] no pXX.txt parts found');
-  process.exit(1);
 }
 
-const bufs = files.map((f) => readFileSync(join(partsDir, f)));
-const combined = Buffer.concat(bufs);
 const md5 = createHash('md5').update(combined).digest('hex');
-
 writeFileSync(out, combined);
 console.log('[assemble-tg] restored', out, combined.length, 'bytes, md5=', md5);
 
