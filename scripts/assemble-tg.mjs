@@ -2,9 +2,9 @@
 /**
  * Assemble TacticalGameView.tsx from parts.
  * Order of preference:
- *   1. pXX.txt  (plain UTF-8)
- *   2. bXX.txt  (base64 of ~10k plain chunks)
- *   3. sXX.txt  (base64 of ~4k plain chunks) + sXX_Y.txt subchunks if present
+ *   1. pXX.txt  (plain UTF-8) — only if total >= 90000 bytes
+ *   2. bXX.txt  (base64) — only if present and decodable
+ *   3. sXX.txt / sXX_Y.txt base64 chunks
  * Expected MD5: fb11fb7ec6c52c138ca21ebf405596fb
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
@@ -30,14 +30,15 @@ const bFiles = all.filter((f) => /^b\d{2}\.txt$/.test(f)).sort();
 const sMain = all.filter((f) => /^s\d{2}\.txt$/.test(f)).sort();
 const sSub = all.filter((f) => /^s\d{2}_\d+\.txt$/.test(f)).sort();
 
-if (plainFiles.length > 0) {
+const plainTotal = plainFiles.reduce((n, f) => n + readFileSync(join(partsDir, f)).length, 0);
+
+if (plainFiles.length > 0 && plainTotal >= 90000) {
   combined = Buffer.concat(plainFiles.map((f) => readFileSync(join(partsDir, f))));
   console.log('[assemble-tg] from plain pXX.txt x', plainFiles.length);
 } else if (bFiles.length > 0) {
   combined = Buffer.concat(bFiles.map((f) => Buffer.from(readFileSync(join(partsDir, f), 'utf8').trim(), 'base64')));
   console.log('[assemble-tg] from base64 bXX.txt x', bFiles.length);
 } else if (sMain.length > 0 || sSub.length > 0) {
-  // Build ordered list: for each index, prefer full sXX if size >= 4000, else concat sXX_0 + sXX_1 + ...
   const byIndex = {};
   for (const f of sMain) {
     const idx = f.match(/^s(\d{2})\.txt$/)[1];
@@ -80,9 +81,9 @@ if (plainFiles.length > 0) {
 const md5 = createHash('md5').update(combined).digest('hex');
 writeFileSync(out, combined);
 console.log('[assemble-tg] restored', out, combined.length, 'bytes, md5=', md5);
-
 if (md5 !== EXPECTED_MD5) {
   console.error('[assemble-tg] MD5 MISMATCH expected', EXPECTED_MD5);
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  console.log('[assemble-tg] checksum OK');
 }
-console.log('[assemble-tg] checksum OK');
