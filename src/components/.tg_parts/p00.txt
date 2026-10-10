@@ -1,1 +1,43 @@
-PLACEHOLDER_REPLACE_ME_P00
+/**
+ * Vanguard Tactical 3D FPS Game View
+ * Full Three.js WebGL First-Person Simulation & HUD
+ * Complete Round Loop, Economy, Grenades, Volumetric Smoke, Dropped Weapons & Spectator Mode
+ */
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as THREE from 'three';
+import { getMapDefinition } from '../maps/index.ts';
+import { buildMapEnvironment, shouldLoadVisualLayer, keepProceduralCollidersOnly } from '../maps/map-env.ts';
+import { visualLayerManager } from '../maps/visual-layer.ts';
+import {
+  loadFpWeaponClone,
+  mapSlotToAssetId,
+  preloadFpWeapons,
+  disposeFpWeaponCache,
+} from '../weapons/fp-weapon-loader.ts';
+import type { GameMode } from '../shared/types.ts';
+
+export type ActiveSlot = 'primary' | 'pistol' | 'knife' | 'he' | 'smoke' | 'flash';
+
+interface TacticalGameViewProps {
+  matchId: string;
+  mode: GameMode;
+  mapId?: string;
+  mapName?: string;
+  playerId: string;
+  username: string;
+  assignedTeam: 'alpha' | 'omega';
+  onMatchComplete: (result: {
+    result: 'VICTORY' | 'DEFEAT' | 'DRAW';
+    score: string;
+    kills: number;
+    deaths: number;
+    assists: number;
+    headshots: number;
+    mvp: boolean;
+    durationSeconds: number;
+  }) => void;
+  onExitToLobby: () => void;
+}
+
+// ... (truncated for length - will use full in next)
