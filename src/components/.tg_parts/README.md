@@ -1,11 +1,15 @@
-# TacticalGameView restore parts
+# TacticalGameView assembly parts
 
-These `gz_XX.txt` files are sequential base64 chunks of a gzipped `TacticalGameView.tsx` (full ~101kB with Shipyard + FP weapon GLB integration).
+Full source is split into `p00.txt` … `p10.txt` (plain UTF-8, 10 kB each).
 
-Run from repo root:
+Restore:
 ```
 node scripts/assemble-tg.mjs
 ```
-or it runs automatically on `npm run build` via prebuild.
 
-Checksum (md5 of restored file): fb11fb7ec6c52c138ca21ebf405596fb
+Or automatically via `npm run prebuild` / `npm run build`.
+
+Expected MD5 of restored file: `fb11fb7ec6c52c138ca21ebf405596fb`
+Size: 101057 bytes
+
+Contains full shipyard map integration + FP weapon GLB loader (preloadFpWeapons / loadFpWeaponClone).
